@@ -64,30 +64,3 @@ defineExpose({
 });
 </script>
 
-<template>
-  <div ref="containerRef" class="source-editor" />
-</template>
-
-<style scoped>
-.source-editor {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-:deep(.CodeMirror) {
-  height: 100%;
-  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-/* Task list markers: `[ ]` = meta/orange, `[x]` = property/green */
-:deep(.cm-meta) {
-  color: #b76e01;
-}
-
-:deep(.cm-property) {
-  color: #2e7d32;
-}
-</style>

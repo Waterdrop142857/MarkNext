@@ -1,0 +1,359 @@
+/* MarkNext app shell layout & chrome (extracted from App.vue) */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--app-bg, #f5f5f5);
+  overflow: hidden;
+  position: relative;
+}
+
+.resize-handles {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: fixed;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.resize-handle.n {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.resize-handle.s {
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 5px;
+  cursor: ns-resize;
+}
+
+.resize-handle.e {
+  right: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.resize-handle.w {
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 5px;
+  cursor: ew-resize;
+}
+
+.resize-handle.ne {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+.resize-handle.nw {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+
+.resize-handle.se {
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+}
+
+.resize-handle.sw {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+}
+
+.app-titlebar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  background: var(--app-titlebar-bg, #2b2d31);
+  color: var(--app-titlebar-fg, #eee);
+  user-select: none;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 16px;
+  flex: 0 0 auto;
+}
+
+.app-logo {
+  font-weight: 700;
+  color: var(--app-titlebar-fg, #fff);
+}
+
+.titlebar-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e81123;
+  flex: 0 0 auto;
+}
+
+.file-path {
+  color: var(--app-titlebar-fg, #bbb);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titlebar-window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  margin-left: 8px;
+  flex: 0 0 auto;
+}
+
+.window-btn {
+  width: 46px;
+  height: 48px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--app-titlebar-fg, #ddd);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.window-btn:hover {
+  background: var(--app-menubar-hover, rgba(255, 255, 255, 0.08));
+  color: var(--app-titlebar-fg, #fff);
+}
+
+.window-btn:active {
+  background: rgba(0, 0, 0, 0.12);
+  color: var(--app-titlebar-fg, #fff);
+}
+
+.window-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.window-btn.close:active {
+  background: #a0261a;
+  color: #fff;
+}
+
+.menu-bar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: var(--app-menubar-bg, #25272b);
+  border-bottom: 1px solid var(--app-menubar-border, rgba(255, 255, 255, 0.06));
+  padding: 0 4px;
+  position: relative;
+  z-index: 20;
+  user-select: none;
+}
+
+.menu-item {
+  position: relative;
+  user-select: none;
+}
+
+.menu-trigger {
+  border: none;
+  background: transparent;
+  color: var(--app-menubar-fg, #ddd);
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.menu-trigger:hover,
+.menu-trigger.active {
+  background: var(--app-menubar-hover, rgba(255, 255, 255, 0.08));
+  color: var(--app-menubar-fg, #fff);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--fluent-menu-bg, #ffffff);
+  border: 1px solid var(--fluent-menu-border, #e5e5e5);
+  border-radius: var(--fluent-menu-radius, 6px);
+  box-shadow: var(--fluent-menu-shadow, 0 8px 24px rgba(0, 0, 0, 0.14));
+  user-select: none;
+}
+
+.menu-command {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--fluent-menu-fg, #1a1a1a);
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.menu-command:hover:not(:disabled) {
+  background: var(--fluent-menu-item-hover, #f3f3f3);
+}
+
+.menu-command:disabled {
+  color: var(--fluent-menu-disabled, #a0a0a0);
+  opacity: 1;
+  cursor: not-allowed;
+}
+
+.menu-command.active {
+  background: var(--fluent-menu-item-active, #e5e5e5);
+  color: var(--fluent-menu-fg, #1a1a1a);
+  font-weight: 600;
+}
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.editor-area {
+  flex: 1;
+  min-height: 0;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.editor-area .muya-editor {
+  width: 100%;
+  max-width: 860px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.editor-area.source-mode {
+  padding: 0;
+}
+
+.editor-area.source-mode .source-editor {
+  background: var(--editor-bg, #fff);
+  box-shadow: none;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #888;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.primary-btn {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.primary-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Prevent selecting window chrome UI */
+.app-titlebar,
+.titlebar-left,
+.titlebar-path,
+.titlebar-window-controls,
+.window-btn,
+.menu-bar,
+.menu-item,
+.menu-trigger,
+.menu-dropdown,
+.menu-command,
+.resize-handle {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+}
+
+.app-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 30px;
+  align-items: center;
+  border-top: 1px solid var(--app-footer-border, #ddd);
+  background: var(--app-footer-bg, #fff);
+  color: var(--app-footer-fg, #666);
+  font-size: 12px;
+}
+
+/* Dark theme refinements */
+:root[data-theme="dark"] .editor-area .muya-editor {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] .empty-state {
+  color: #aaaaaa;
+}
+
+:root[data-theme="dark"] .primary-btn {
+  background: rgba(255, 255, 255, 0.08);
+  color: #eeeeee;
+}
+
+:root[data-theme="dark"] .primary-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}

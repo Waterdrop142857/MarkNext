@@ -1,0 +1,50 @@
+/* SourceEditor / CodeMirror (extracted from components/SourceEditor.vue) */
+
+.source-editor {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.source-editor .CodeMirror {
+  height: 100%;
+  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Task list markers: `[ ]` = meta/orange, `[x]` = property/green */
+.source-editor .cm-meta {
+  color: #b76e01;
+}
+
+.source-editor .cm-property {
+  color: #2e7d32;
+}
+
+/* Dark theme CodeMirror overrides */
+:root[data-theme="dark"] .source-editor .CodeMirror {
+  background: var(--editor-bg, #1e1e1e);
+  color: var(--editor-color, #d4d4d4);
+}
+
+:root[data-theme="dark"] .source-editor .CodeMirror-cursor {
+  border-left-color: var(--editor-color, #d4d4d4);
+}
+
+:root[data-theme="dark"] .source-editor .CodeMirror-gutters {
+  background: #252526;
+  border-right: 1px solid #333333;
+}
+
+:root[data-theme="dark"] .source-editor .CodeMirror-linenumber {
+  color: #858585;
+}
+
+:root[data-theme="dark"] .source-editor .cm-meta {
+  color: #d19a66;
+}
+
+:root[data-theme="dark"] .source-editor .cm-property {
+  color: #56b6c2;
+}

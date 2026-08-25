@@ -2,6 +2,91 @@
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: light;
+
+  /* App chrome */
+  --app-bg: #f5f5f5;
+  --app-titlebar-bg: #f3f3f3;
+  --app-titlebar-fg: #1a1a1a;
+  --app-menubar-bg: #f3f3f3;
+  --app-menubar-fg: #1a1a1a;
+  --app-menubar-border: #e0e0e0;
+  --app-menubar-hover: rgba(0, 0, 0, 0.06);
+  --app-footer-bg: #ffffff;
+  --app-footer-fg: #666666;
+  --app-footer-border: #dddddd;
+
+  /* Editor */
+  --editor-bg: #ffffff;
+  --editor-color: #1f1f1f;
+
+  /* Fluent UI menu tokens */
+  --fluent-menu-bg: #ffffff;
+  --fluent-menu-fg: #1a1a1a;
+  --fluent-menu-border: #e5e5e5;
+  --fluent-menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  --fluent-menu-item-hover: #f3f3f3;
+  --fluent-menu-item-active: #e5e5e5;
+  --fluent-menu-separator: #e5e5e5;
+  --fluent-menu-disabled: #a0a0a0;
+  --fluent-menu-shortcut: #888888;
+  --fluent-menu-radius: 6px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* App chrome */
+  --app-bg: #1e1e1e;
+  --app-titlebar-bg: #2b2d31;
+  --app-titlebar-fg: #eeeeee;
+  --app-menubar-bg: #25272b;
+  --app-menubar-fg: #dddddd;
+  --app-menubar-border: rgba(255, 255, 255, 0.06);
+  --app-menubar-hover: rgba(255, 255, 255, 0.08);
+  --app-footer-bg: #1e1e1e;
+  --app-footer-fg: #9d9d9d;
+  --app-footer-border: #333333;
+
+  /* Editor */
+  --editor-bg: #1e1e1e;
+  --editor-color: #d4d4d4;
+
+  /* Fluent UI menu tokens (dark) */
+  --fluent-menu-bg: #2b2d31;
+  --fluent-menu-fg: #ffffff;
+  --fluent-menu-border: #45474a;
+  --fluent-menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --fluent-menu-item-hover: #3b3d41;
+  --fluent-menu-item-active: #4a4d52;
+  --fluent-menu-separator: #45474a;
+  --fluent-menu-disabled: #8a8a8a;
+  --fluent-menu-shortcut: #a0a0a0;
+  --fluent-menu-radius: 6px;
+
+  /* Muya editor theme overrides (higher specificity than muya's :root) */
+  --theme-color: rgb(33 181 111 / 100%);
+  --highlight-color: rgb(33 181 111 / 50%);
+  --selection-color: rgb(45 170 219 / 45%);
+  --editor-color-80: #e8e8e8;
+  --editor-color-50: #9d9d9d;
+  --editor-color-30: #6a6a6a;
+  --editor-color-10: #3a3a3a;
+  --editor-color-04: #2a2a2a;
+  --editor-bg-color: #1e1e1e;
+  --code-block-bg-color: rgb(255 255 255 / 6%);
+  --table-border-color: #3a3a3a;
+  --input-bg-color: rgb(255 255 255 / 8%);
+  --button-bg-color: #2d2d2d;
+  --button-border: 1px solid #4a4a4a;
+  --float-bg-color: #2d2d2d;
+  --float-hover-color: rgb(255 255 255 / 6%);
+  --float-border-color: rgb(255 255 255 / 12%);
+  --link-color: #479ef5;
+  --hr-color: var(--editor-color-10);
+}
+
 html,
 body,
 #app {
@@ -14,6 +99,6 @@ body {
   font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  color: #1f1f1f;
-  background: #f5f5f5;
+  color: var(--editor-color, #1f1f1f);
+  background: var(--app-bg, #f5f5f5);
 }
