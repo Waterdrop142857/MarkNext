@@ -53,6 +53,7 @@ export const appMenus: AppMenu[] = [
     id: "help",
     label: "帮助",
     items: [
+      { id: "devtools", label: "打开开发者工具" },
       { id: "about", label: "关于 MarkNext" },
     ],
   },

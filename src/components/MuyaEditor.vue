@@ -95,9 +95,10 @@ onMounted(() => {
   const placeholder = document.createElement("div");
   wrapperRef.value.appendChild(placeholder);
 
-  const initialMarkdown =
-    props.modelValue ||
-    "# Hello Muya\n\nStart typing **bold**, *italic*, `code`, or a list:\n\n- item 1\n- item 2\n";
+  // Start with the actual document content. New files pass an empty string and
+  // must NOT be seeded with sample content (it made WYSIWYG and source mode
+  // disagree on first-new-file state).
+  const initialMarkdown = props.modelValue;
 
   editor = new Muya(placeholder, {
     markdown: initialMarkdown,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import MuyaEditor from "./components/MuyaEditor.vue";
 import SourceEditor from "./components/SourceEditor.vue";
 import TitleBar from "./components/TitleBar.vue";
@@ -113,6 +114,11 @@ function runMenuCommand(itemId: string) {
       break;
     case "theme-system":
       setThemeMode("system");
+      break;
+    case "devtools":
+      void invoke("open_devtools").catch((error) => {
+        console.error("Failed to open devtools:", error);
+      });
       break;
     case "about":
       console.log("MarkNext - WYSIWYG Markdown editor built with Tauri 2 + Vue 3");

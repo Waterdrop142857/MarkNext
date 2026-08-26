@@ -64,3 +64,7 @@ defineExpose({
 });
 </script>
 
+<template>
+  <div ref="containerRef" class="source-editor" />
+</template>
+

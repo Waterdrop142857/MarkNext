@@ -66,7 +66,15 @@ MarkNext/
 
 ## 路线图
 
-见 [ARCHITECTURE.md](./ARCHITECTURE.md)，后续规划包括多标签页、侧边栏、全局搜索、导出、设置、更新与打包等。
+按重要性排序，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)：
+
+1. 完整的编辑功能（撤销、重做、查找替换等）
+2. i18n 国际化
+3. 自定义主题
+4. 多标签页
+5. 侧边栏（目录 / 文档层级）
+6. 通过可选 pandoc 导出其他格式
+7. 打印
 
 ## License
 
