@@ -77,9 +77,9 @@ class MathPreview extends Parent {
             }
         }
         else {
-            this.domNode!.innerHTML = `<div class="${CLASS_NAMES.MU_EMPTY}">&lt; ${i18n.t(
+            this.domNode!.innerHTML = `<div class="${CLASS_NAMES.MU_EMPTY}">&lt; <span data-muya-i18n="Empty Mathematical Formula">${i18n.t(
                 'Empty Mathematical Formula',
-            )} &gt;</div>`;
+            )}</span> &gt;</div>`;
         }
     }
 }

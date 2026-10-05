@@ -5,7 +5,10 @@ import getLoader from 'prismjs/dependencies';
 // predeclare every Prism component with import.meta.glob. This fixes the
 // "Unknown variable dynamic import" errors in dev and WebKitGTK.
 const prismModules = import.meta.glob(
-    '../../../node_modules/prismjs/components/prism-*.js',
+    [
+        '../../../../node_modules/prismjs/components/prism-*.js',
+        '!../../../../node_modules/prismjs/components/prism-*.min.js',
+    ],
 );
 
 interface ILangLoadStatus {
@@ -30,7 +33,8 @@ const { languages } = components;
 export function transformAliasToOrigin(langs: string[]) {
     const result = [];
 
-    for (const lang of langs) {
+    for (const value of langs) {
+        const lang = value.toLowerCase();
         if (languages[lang]) {
             result.push(lang);
         }
@@ -83,6 +87,8 @@ function initLoadLanguage(Prism: IPrismLike) {
         if (!Array.isArray(langs))
             langs = [langs];
 
+        langs = transformAliasToOrigin(langs);
+
         const statuses: ILangLoadStatus[] = [];
         // The user might have loaded languages via some other way or used `prism.js` which already includes some
         // We don't need to validate the ids because `getLoader` will ignore invalid ones
@@ -98,7 +104,7 @@ function initLoadLanguage(Prism: IPrismLike) {
                 return;
             }
             delete Prism.languages[lang];
-            const path = `../../../node_modules/prismjs/components/prism-${lang}.js`;
+            const path = `../../../../node_modules/prismjs/components/prism-${lang}.js`;
             const loader = prismModules[path];
             if (!loader) {
                 statuses.push({ lang, status: 'noexist' });

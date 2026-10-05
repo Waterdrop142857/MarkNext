@@ -55,6 +55,10 @@ export class CodeBlockLanguageSelector extends BaseScrollFloat {
     private _oldVNode: VNode | null = null;
     private _block: ParagraphContent | LangInputContent | null = null;
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-list-picker';
         const opts = Object.assign({}, defaultOptions, options);
@@ -150,7 +154,7 @@ export class CodeBlockLanguageSelector extends BaseScrollFloat {
         });
 
         if (children.length === 0)
-            children = [h('div.no-result', 'No result')];
+            children = [h('div.no-result', this.muya.i18n.t('No result'))];
 
         const vnode = h('ul', children);
 

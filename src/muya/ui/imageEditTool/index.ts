@@ -105,6 +105,10 @@ export class ImageEditTool extends BaseFloat {
      * @param muya - Muya editor instance
      * @param options - Tool options including image picker and upload handler
      */
+    protected override refreshLocale() {
+        this._render();
+    }
+
     constructor(muya: Muya, options: Options = { ...defaultOptions }) {
         const name = 'mu-image-selector';
         super(muya, name, Object.assign({}, defaultOptions, options));
@@ -408,8 +412,9 @@ export class ImageEditTool extends BaseFloat {
         const uploadedSrc = await this.options.imageAction!({ src, title, alt });
 
         // Store local path mapping if available
-        const { src: localPath } = getImageSrc(src);
+        const { src: localPath } = getImageSrc(src, this.muya.options?.resolveImageSrc);
         if (localPath) {
+            if (this.muya.options?.prepareImageSrc) await this.muya.options.prepareImageSrc(localPath);
             this.muya.editor.inlineRenderer.renderer.urlMap.set(uploadedSrc, localPath);
         }
 

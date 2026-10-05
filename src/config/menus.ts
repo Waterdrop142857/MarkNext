@@ -1,60 +1,86 @@
+import type { MessageKey } from "../i18n";
+
 export interface MenuItem {
   id: string;
   label: string;
   checked?: boolean;
   disabled?: boolean;
+  shortcut?: string;
 }
 
 export interface AppMenu {
   id: string;
   label: string;
+  command?: string;
   items: MenuItem[];
 }
 
-export const appMenus: AppMenu[] = [
+interface MenuDefinition {
+  id: string;
+  label: MessageKey;
+  command?: string;
+  items: (Omit<MenuItem, "label"> & { label: MessageKey })[];
+}
+
+export const appMenus: MenuDefinition[] = [
   {
     id: "file",
-    label: "文件",
+    label: "menu.file",
     items: [
-      { id: "new", label: "新建" },
-      { id: "open", label: "打开..." },
-      { id: "save", label: "保存" },
-      { id: "saveAs", label: "另存为..." },
-      { id: "close", label: "关闭" },
-      { id: "reset", label: "重置示例" },
-      { id: "exit", label: "退出" },
+      { id: "new", label: "command.new" },
+      { id: "open", label: "command.open" },
+      { id: "save", label: "command.save" },
+      { id: "saveAs", label: "command.saveAs" },
+      { id: "close", label: "command.close" },
+      { id: "exit", label: "command.exit" },
     ],
   },
   {
     id: "edit",
-    label: "编辑",
+    label: "menu.edit",
     items: [
-      { id: "toggleMode", label: "源码模式" },
-      { id: "clear", label: "清空" },
+      { id: "undo", label: "command.undo" },
+      { id: "redo", label: "command.redo" },
+      { id: "cut", label: "command.cut" },
+      { id: "copy", label: "command.copy" },
+      { id: "paste", label: "command.paste" },
+      { id: "find", label: "command.find" },
+      { id: "replace", label: "command.replace" },
+      { id: "findNext", label: "command.findNext" },
+      { id: "findPrevious", label: "command.findPrevious" },
+      { id: "selectAll", label: "command.selectAll" },
+      { id: "toggleMode", label: "command.toggleMode" },
+      { id: "clear", label: "command.clear" },
     ],
   },
   {
     id: "theme",
-    label: "主题",
+    label: "menu.theme",
     items: [
-      { id: "theme-system", label: "跟随系统" },
-      { id: "theme-light", label: "亮色" },
-      { id: "theme-dark", label: "暗色" },
+      { id: "theme-system", label: "command.theme-system" },
+      { id: "theme-light", label: "command.theme-light" },
+      { id: "theme-dark", label: "command.theme-dark" },
     ],
   },
   {
+    id: "settings",
+    label: "menu.settings",
+    command: "settings",
+    items: [],
+  },
+  {
     id: "paragraph",
-    label: "段落",
+    label: "menu.paragraph",
     items: [
-      { id: "paragraph", label: "段落（开发中）", disabled: true },
+      { id: "paragraph", label: "command.paragraph", disabled: true },
     ],
   },
   {
     id: "help",
-    label: "帮助",
+    label: "menu.help",
     items: [
-      { id: "devtools", label: "打开开发者工具" },
-      { id: "about", label: "关于 MarkNext" },
+      ...(import.meta.env.DEV ? [{ id: "devtools", label: "command.devtools" as const }] : []),
+      { id: "about", label: "command.about" },
     ],
   },
 ];

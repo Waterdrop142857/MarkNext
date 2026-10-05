@@ -75,9 +75,14 @@ abstract class BaseFloat {
         resizeObserver.observe(container);
     }
 
+    protected refreshLocale(): void {}
+
     listen() {
         const { eventCenter, domNode } = this.muya;
         const { floatBox } = this;
+        eventCenter.subscribe('locale-change', () => {
+            if (this.status) this.refreshLocale();
+        });
 
         const keydownHandler = (event: Event) => {
             if (isKeyboardEvent(event) && event.key === EVENT_KEYS.Escape)

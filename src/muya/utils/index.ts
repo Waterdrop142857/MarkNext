@@ -140,7 +140,15 @@ export function throttle<TArgs extends unknown[], TReturn>(
 }
 
 export function deepClone<T>(value: T): T {
-    return structuredClone(value);
+    try {
+        return structuredClone(value);
+    }
+    catch {
+        // WebKitGTK's structuredClone can throw DataCloneError on values that
+        // are JSON-cloneable (Muya state, history ops, sentinel state). Fall
+        // back to a JSON round-trip for compatibility.
+        return JSON.parse(JSON.stringify(value)) as T;
+    }
 }
 
 export function escapeHTML(str: string) {
@@ -173,7 +181,7 @@ export function unescapeHTML(str: string) {
 
 export function escapeInBlockHtml(html: string) {
     return html.replace(
-        /(<(style|script|title)[^<>]*>)([\s\S]*?)(<\/\2>)/g,
+        /(<(style|script|title)[^<>]*>)([\s\S]*?)(<\/\2>)/gi,
         (_m, p1, _p2, p3, p4) => {
             return `${escapeHTML(p1)}${p3}${escapeHTML(p4)}`;
         },

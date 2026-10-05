@@ -31,6 +31,10 @@ export class TableColumnToolbar extends BaseFloat {
     static pluginName = 'tableColumnTools';
     public override capturesContentKeydown = true;
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-table-column-tools';
         const opts = Object.assign({}, defaultOptions, options);

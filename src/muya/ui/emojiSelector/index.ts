@@ -27,6 +27,10 @@ export class EmojiSelector extends BaseScrollFloat {
     public override renderArray: EmojiType[] = [];
     public override activeItem: EmojiType | null = null;
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya) {
         const name = 'mu-emoji-picker';
         super(muya, name, defaultOptions);

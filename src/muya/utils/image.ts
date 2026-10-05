@@ -67,8 +67,11 @@ function resolveRelativePath(base: string, relative: string): string {
     return tail ? `${root}/${tail}` : root;
 }
 
-export function getImageSrc(src: string) {
-    const EXT_REG = /\.(?:jpeg|jpg|png|gif|svg|webp)(?=\?|$)/i;
+export function getImageSrc(src: string, resolver?: (source: string) => string | undefined) {
+    const resolved = resolver?.(src);
+    if (resolved !== undefined) return { isUnknownType: false, src: resolved };
+    if (/^blob:/i.test(src)) return { isUnknownType: false, src };
+    const EXT_REG = /\.(?:avif|bmp|gif|ico|jpeg|jpg|png|svg|webp)(?=[?#]|$)/i;
     // http[s] (domain or IPv4 or localhost or IPv6) [port] /not-white-space
     const URL_REG
         = /^https?:\/\/(?:[\w\-.~]+\.[a-z]{2,}|[0-9.]+|localhost|\[[a-f0-9.:]+\])(?::\d{1,5})?\/\S+/i;
@@ -128,11 +131,12 @@ export function getImageSrc(src: string) {
     }
 }
 
-export async function loadImage(url: string, detectContentType = false): Promise<{
+export async function loadImage(url: string, detectContentType = false, prepare?: (source: string) => Promise<void>): Promise<{
     url: string;
     width: number;
     height: number;
 }> {
+    await prepare?.(url);
     if (detectContentType) {
         const isImage = await checkImageContentType(url);
         // Only bail out when we positively know it is NOT an image. `null`

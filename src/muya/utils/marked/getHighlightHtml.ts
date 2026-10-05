@@ -2,6 +2,7 @@ import type { ILexOption } from './types';
 import { Marked } from 'marked';
 import { markedHighlight } from 'marked-highlight';
 import Prism from 'prismjs';
+import { transformAliasToOrigin } from '../prism/loadLanguage';
 import cjkEmStrongExtension from './extensions/cjkEmStrong';
 import emojiExtension from './extensions/emoji';
 import footnoteExtension from './extensions/footnote';
@@ -24,15 +25,16 @@ function highlight(code: string, lang: string) {
     if (!lang)
         return code;
 
-    if (DIAGRAM_TYPE.includes(lang))
+    const language = transformAliasToOrigin([lang])[0];
+    if (DIAGRAM_TYPE.includes(language))
         return code;
 
-    const grammar = Prism.languages[lang];
+    const grammar = Prism.languages[language];
     if (!grammar) {
         console.warn(`Unable to find grammar for "${lang}".`);
         return code;
     }
-    return Prism.highlight(code, grammar, lang);
+    return Prism.highlight(code, grammar, language);
 }
 
 export function getHighlightHtml(src: string, options: ILexOption = {}) {

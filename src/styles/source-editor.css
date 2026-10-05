@@ -9,9 +9,13 @@
 .source-editor .CodeMirror {
   width: 100%;
   height: 100%;
-  font-family: "JetBrains Mono", "Fira Code", "Source Code Pro", Consolas, monospace;
-  font-size: 14px;
+  font-family: var(--app-code-font-family, "JetBrains Mono", "Fira Code", Consolas, monospace);
+  font-size: var(--mu-font-size, 16px);
   line-height: 1.6;
+}
+
+.source-editor .cm-search-match {
+  background: var(--highlight-color, rgba(255, 210, 0, 0.4));
 }
 
 /* Task list markers: `[ ]` = meta/orange, `[x]` = property/green */

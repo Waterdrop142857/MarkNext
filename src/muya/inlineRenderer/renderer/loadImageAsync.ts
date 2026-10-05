@@ -36,7 +36,9 @@ export default function loadImageAsync(
         const loadSrc = /^file:\/\//i.test(src)
             ? `${src}${src.includes('?') ? '&' : '?'}mucache=${id}`
             : src;
-        loadImage(loadSrc, isUnknownType)
+        const prepare = this.muya?.options?.prepareImageSrc;
+        const loading = prepare ? loadImage(loadSrc, isUnknownType, prepare) : loadImage(loadSrc, isUnknownType);
+        loading
             .then(({ url, width, height }) => {
                 const imageText: HTMLElement | null = document.querySelector(`#${id}`);
                 const img = document.createElement('img');

@@ -83,6 +83,10 @@ export class InlineFormatToolbar extends BaseFloat {
      * @param muya - Muya editor instance
      * @param options - Toolbar options
      */
+    protected override refreshLocale() {
+        this._render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-format-picker';
         const opts = Object.assign({}, defaultOptions, options);

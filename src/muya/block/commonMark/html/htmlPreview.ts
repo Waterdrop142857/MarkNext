@@ -1,8 +1,8 @@
 import type { Muya } from '../../../muya';
 import type { IHtmlBlockState, TState } from '../../../state/types';
-import { CLASS_NAMES, PREVIEW_DOMPURIFY_CONFIG } from '../../../config';
-import { sanitize } from '../../../utils';
+import { CLASS_NAMES } from '../../../config';
 import { getImageSrc } from '../../../utils/image';
+import { parseHtmlPreview } from '../../../utils/sanitizeHtmlPreview';
 import logger from '../../../utils/logger';
 import Parent from '../../base/parent';
 
@@ -22,6 +22,8 @@ export function isEmptyHtmlBlock(html: string): boolean {
 
 class HTMLPreview extends Parent {
     private _html: string;
+    private _revision = 0;
+    private _empty = false;
 
     static override blockName = 'html-preview';
 
@@ -50,30 +52,43 @@ class HTMLPreview extends Parent {
     }
 
     update(html = this._html) {
+        const revision = ++this._revision;
         if (this._html !== html)
             this._html = html;
 
-        const { disableHtml } = this.muya.options;
-        const htmlContent = sanitize(html, PREVIEW_DOMPURIFY_CONFIG, disableHtml) as string;
+        const { disableHtml, resolveImageSrc, prepareImageSrc } = this.muya.options;
+        const doc = parseHtmlPreview(html, disableHtml);
+        const htmlContent = doc.body.innerHTML;
 
         // handle empty html bock
-        if (isEmptyHtmlBlock(htmlContent)) {
-            this.domNode!.innerHTML
-                = `<div class="${CLASS_NAMES.MU_EMPTY}">&lt;Empty HTML Block&gt;</div>`;
-        }
+        this._empty = isEmptyHtmlBlock(htmlContent);
+        if (this._empty) this.refreshLocale();
         else {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlContent, 'text/html');
             const imgs = doc.documentElement.querySelectorAll('img');
 
             for (const img of imgs) {
                 const src = img.getAttribute('src')!;
-                const imageSrc = getImageSrc(src);
-                img.setAttribute('src', imageSrc.src);
+                const imageSrc = getImageSrc(src, resolveImageSrc);
+                if (prepareImageSrc) {
+                    img.removeAttribute('src');
+                    // Keep this exact element so stale preparations cannot mutate
+                    // a subsequent preview. No asset request precedes permission.
+                    void prepareImageSrc(imageSrc.src).then(() => {
+                        if (revision === this._revision && imageSrc.src && this.domNode?.contains(img)) img.src = imageSrc.src;
+                    }).catch(() => img.classList.add(CLASS_NAMES.MU_IMAGE_FAIL));
+                }
+                else if (imageSrc.src) img.setAttribute('src', imageSrc.src);
+                else img.removeAttribute('src');
             }
 
-            this.domNode!.innerHTML
-                = doc.documentElement!.querySelector('body')!.innerHTML;
+            this.domNode!.replaceChildren(...doc.body.childNodes);
+        }
+    }
+
+    refreshLocale() {
+        if (this._empty) {
+            this.domNode!.innerHTML = `<div class="${CLASS_NAMES.MU_EMPTY}"></div>`;
+            this.domNode!.firstElementChild!.textContent = `<${this.muya.i18n.t('Empty HTML Block')}>`;
         }
     }
 

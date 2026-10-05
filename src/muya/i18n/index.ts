@@ -2,6 +2,7 @@ import type { Muya } from '../muya';
 import type { ILocale } from './types';
 
 import { en } from '../locales/en';
+import { supplemental } from './supplemental';
 
 class I18n {
     public lang: string;
@@ -11,7 +12,8 @@ class I18n {
         const { name, resource } = object || en;
         this.lang = name;
         this._resources = {
-            [name]: resource,
+            en: { ...en.resource, ...supplemental.en },
+            [name]: { ...resource, ...supplemental[name] },
         };
     }
 
@@ -27,7 +29,7 @@ class I18n {
         this.lang = name;
         this._resources = {
             ...this._resources,
-            [name]: resource,
+            [name]: { ...resource, ...supplemental[name] },
         };
     }
 }

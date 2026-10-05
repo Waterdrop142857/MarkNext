@@ -10,6 +10,8 @@ export class Search {
     private _value: string = '';
     public matches: IMatch[] = [];
     public index: number = -1;
+    private _document = '';
+    private _options = {};
 
     get value() {
         return this._value;
@@ -27,6 +29,8 @@ export class Search {
         this._value = '';
         this.matches = [];
         this.index = -1;
+        this._document = '';
+        this._options = {};
     }
 
     private _updateMatches(isClear = false) {
@@ -91,12 +95,14 @@ export class Search {
     }
 
     replace(replaceValue: string, opt = { isSingle: true, isRegexp: false }) {
+        this._refresh();
         const { isSingle, isRegexp, ...rest } = opt;
-        const options = Object.assign({}, DEFAULT_SEARCH_OPTIONS, rest);
+        const options = Object.assign({}, DEFAULT_SEARCH_OPTIONS, this._options, rest);
         const { matches, index } = this;
         const value = this._value;
 
-        if (matches.length) {
+        if (matches.length && (!isSingle || (index >= 0 && index < matches.length))) {
+            const replaced = isSingle ? matches[index] : undefined;
             if (isRegexp)
                 replaceValue = buildRegexValue(matches[index], replaceValue);
 
@@ -108,12 +114,30 @@ export class Search {
                 // replace all
                 this._innerReplace(matches, replaceValue);
             }
-            const highlightIndex = index < matches.length - 1 ? index : index - 1;
-
+            // Commit the queued text operations before recording the search
+            // snapshot, or the next command mistakes this replacement for an
+            // external edit and resets the active match to the first one.
+            this._muya.flush();
             this.search(value, {
                 ...options,
-                highlightIndex: isSingle ? highlightIndex : -1,
+                highlightIndex: -1,
             });
+            if (replaced && this.matches.length) {
+                // Follow the replacement boundary, rather than its old match
+                // index: the replacement itself may still contain the query.
+                const order = new Map<Content, number>();
+                this._scrollPage?.depthFirstTraverse((block: TreeNode) => {
+                    if (block.isContent()) order.set(block, order.size);
+                });
+                const replacedOrder = order.get(replaced.block)!;
+                const next = this.matches.findIndex(match => {
+                    const blockOrder = order.get(match.block)!;
+                    return blockOrder > replacedOrder || (blockOrder === replacedOrder && match.start >= replaced.start + replaceValue.length);
+                });
+                this._updateMatches(true);
+                this.index = next < 0 ? 0 : next;
+                this._updateMatches();
+            }
         }
 
         return this;
@@ -124,6 +148,13 @@ export class Search {
      * @param {string} action : previous or next.
      */
     find(action: 'previous' | 'next'): this {
+        if (this._refresh()) {
+            if (action === 'previous' && this.matches.length) {
+                this.index = this.matches.length - 1;
+                this._updateMatches();
+            }
+            return this;
+        }
         const { matches } = this;
         let { index } = this;
         const len = matches.length;
@@ -189,7 +220,7 @@ export class Search {
             });
         }
 
-        if (highlightIndex !== -1) {
+        if (highlightIndex >= 0 && highlightIndex < matches.length) {
             // If set the highlight index, then highlight the highlighIndex
             index = highlightIndex;
         }
@@ -199,6 +230,8 @@ export class Search {
         }
 
         Object.assign(this, { _value: value, matches, index });
+        this._options = options;
+        this._document = this._muya.getMarkdown();
 
         this._updateMatches();
 
@@ -215,5 +248,13 @@ export class Search {
         }
 
         return this;
+    }
+
+    private _refresh(): boolean {
+        if (this._value && this._muya.getMarkdown() !== this._document) {
+            this.search(this._value, { ...this._options, highlightIndex: -1 });
+            return true;
+        }
+        return false;
     }
 }

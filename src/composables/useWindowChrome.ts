@@ -1,5 +1,7 @@
+import { t } from "../i18n";
 import { onBeforeUnmount, ref } from "vue";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { showError } from "../services/dialogs";
 
 export type ResizeDirection =
   | "North"
@@ -14,6 +16,8 @@ export type ResizeDirection =
 export function useWindowChrome() {
   const isMaximized = ref(false);
   let unlistenResize: (() => void) | null = null;
+  let unlistenClose: (() => void) | null = null;
+  let disposed = false;
 
   function getWindow() {
     try {
@@ -49,8 +53,11 @@ export function useWindowChrome() {
     void getWindow()?.toggleMaximize();
   }
 
-  function closeWindow() {
-    void getWindow()?.close();
+  async function destroyWindow() {
+    const win = getWindow();
+    if (!win) throw new Error(t("error.windowUnavailable"));
+    // Called only after the shared document action has approved closing.
+    await win.destroy();
   }
 
   async function refreshMaximized() {
@@ -64,14 +71,31 @@ export function useWindowChrome() {
     }
   }
 
-  async function initWindowState() {
+  async function initWindowState(requestClose: () => Promise<unknown>) {
     const win = getWindow();
-    if (!win) return;
-    await refreshMaximized();
+    if (!win || disposed) return;
     try {
-      unlistenResize = await win.onResized(() => {
+      const unlisten = await win.onCloseRequested(async (event) => {
+        event.preventDefault();
+        await requestClose();
+      });
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      unlistenClose = unlisten;
+    }
+    catch (error) {
+      await showError(t("error.closeProtection"), error);
+    }
+    await refreshMaximized();
+    if (disposed) return;
+    try {
+      const unlisten = await win.onResized(() => {
         void refreshMaximized();
       });
+      if (disposed) unlisten();
+      else unlistenResize = unlisten;
     }
     catch {
       unlistenResize = null;
@@ -79,6 +103,9 @@ export function useWindowChrome() {
   }
 
   onBeforeUnmount(() => {
+    disposed = true;
+    unlistenClose?.();
+    unlistenClose = null;
     unlistenResize?.();
     unlistenResize = null;
   });
@@ -89,7 +116,7 @@ export function useWindowChrome() {
     startResize,
     minimizeWindow,
     toggleMaximizeWindow,
-    closeWindow,
+    destroyWindow,
     initWindowState,
   };
 }

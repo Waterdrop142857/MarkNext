@@ -726,6 +726,15 @@ figure.mu-diagram-block .mu-diagram-preview {
     width: 100%;
 }
 
+/* Document HTML cannot paint outside its preview or create a viewport-level
+   stacking context through classes/SVG/oversized formatting. */
+figure.mu-html-block .mu-html-preview {
+    contain: layout paint;
+    isolation: isolate;
+    max-height: min(60vh, 480px);
+    overflow: auto;
+}
+
 figure.mu-math-block .mu-math-preview .katex-display {
     margin: 0;
     padding: 1em 0;

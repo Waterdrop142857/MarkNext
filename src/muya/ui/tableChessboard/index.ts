@@ -24,6 +24,10 @@ class TablePicker extends BaseFloat {
     private _select: ICheckerCount | null;
     private _tableContainer: HTMLElement;
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya) {
         const name = 'mu-table-picker';
         super(muya, name);
@@ -138,7 +142,7 @@ class TablePicker extends BaseFloat {
                         },
                     },
                 },
-                'OK',
+                this.muya.i18n.t('OK'),
             ),
         ]);
 

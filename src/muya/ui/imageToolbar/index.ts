@@ -33,6 +33,10 @@ export class ImageToolBar extends BaseFloat {
     private _block: Format | null = null;
     private _toolbarContainer: HTMLDivElement = document.createElement('div');
 
+    protected override refreshLocale() {
+        this._render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-image-toolbar';
         const opts = Object.assign({}, defaultOptions, options);

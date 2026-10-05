@@ -3,16 +3,70 @@
 .muya-editor {
   width: 100%;
   height: 100%;
-  overflow-y: auto;
-  background: var(--editor-bg, #ffffff);
+  padding-inline-end: var(--app-ui-scrollbar-space);
+  background: transparent;
   color: var(--editor-color, #1f1f1f);
+  /* Also contain inline HTML/class-based positioning at the trusted Vue host
+     boundary; a document cannot paint over application menus or dialogs. */
+  contain: layout paint;
+  isolation: isolate;
 }
 
-/* WebKitGTK only: remove the native block-width selection paint and replace it
-   with our own `Range.getClientRects()` overlay (drawn in JS). */
+.muya-editor > .mu-editor {
+  display: flow-root;
+  min-height: 100%;
+  background: var(--editor-bg, #ffffff);
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+:root[data-theme="dark"] .muya-editor > .mu-editor {
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* Mermaid embeds ID-scoped CSS instead of literal SVG stroke attributes.
+   Match connectors specifically, leaving node fills and other renderers alone.
+   The app ID beats Mermaid's generated SVG ID selectors; inline linkStyle
+   colors still take precedence. Theme changes only repaint the existing SVG. */
+:root[data-theme="dark"] #app .mu-diagram-preview[data-diagram-type="mermaid"] svg :is(
+  .flowchart-link, .edgePath .path, .edgePaths > path,
+  .messageLine0, .messageLine1, .actor-line, .loopLine,
+  .relation, .relationshipLine, .transition
+) {
+  stroke: var(--editor-color);
+}
+
+/* Apply stroke directly to marker geometry, including hollow class/ER markers.
+   Mermaid uses !important on some marker styles; preserve their fill semantics. */
+:root[data-theme="dark"] #app .mu-diagram-preview[data-diagram-type="mermaid"] svg marker :is(path, circle, polygon, line) {
+  stroke: var(--editor-color) !important;
+}
+
+:root[data-theme="dark"] #app .mu-diagram-preview[data-diagram-type="mermaid"] svg :is(
+  marker[id*="-point"], marker[id*="-circle"],
+  marker[id$="-arrowhead"], marker[id$="-crosshead"], marker[id*="-barb"],
+  marker.composition, marker.dependency
+) :is(path, circle, polygon) {
+  fill: var(--editor-color) !important;
+}
+
+/* Sequence message/loop labels sit directly on the editor background. */
+:root[data-theme="dark"] #app .mu-diagram-preview[data-diagram-type="mermaid"] svg :is(.messageText, .loopText, .loopText > tspan) {
+  fill: var(--editor-color);
+}
+
+/* WebKitGTK only: paint selected visible text/media, excluding block boxes and
+   KaTeX's clipped MathML accessibility representation. */
 .mu-webkit-selection-fix .mu-editor ::selection,
 .mu-webkit-selection-fix .mu-editor *::selection {
   background: transparent !important;
+}
+
+/* These opaque hover backgrounds would cover the selection layer behind the
+   content. Preserve hover feedback on previews outside the current selection. */
+.mu-webkit-selection-fix .mu-editor figure.mu-math-block.mu-webkit-selected-preview:not(.mu-active):hover,
+.mu-webkit-selection-fix .mu-editor figure.mu-html-block.mu-webkit-selected-preview:not(.mu-active, .mu-disable-html-render):hover {
+  background: transparent;
 }
 
 .mu-webkit-selection-overlay {
@@ -21,6 +75,8 @@
   left: 0;
   width: 100%;
   pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
   z-index: -1;
 }
 
@@ -28,4 +84,13 @@
   position: absolute;
   background: var(--selection-color);
   border-radius: 2px;
+}
+
+/* Typography changes repaint/reflow the current editor, without a remount. */
+.muya-editor code.mu-inline-rule,
+.muya-editor .mu-frontmatter,
+.muya-editor .mu-html-container,
+.muya-editor .mu-math-container,
+.muya-editor .mu-diagram-container {
+  font-family: var(--app-code-font-family, monospace);
 }

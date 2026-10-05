@@ -4,7 +4,7 @@ import type { TBlockPath } from './block/types';
 import type { Listener } from './event/types';
 import type { ILocale } from './i18n/types';
 import type { IIndexCursor } from './selection/offsetCursor';
-import type { IHistorySelection, IPublicCursorInput } from './selection/types';
+import type { IHistorySelection, IAnchorFocusInfo, IPublicCursorInput } from './selection/types';
 import type { ITocItem } from './state/getTOC';
 import type { IBulletListState, IOrderListState, ITableState, ITaskListState, TState } from './state/types';
 import type { IMuyaOptions, Nullable } from './types';
@@ -22,6 +22,7 @@ import {
 import { Editor } from './editor/index';
 import EventCenter from './event/index';
 import I18n from './i18n/index';
+import { refreshLocale } from './i18n/refresh';
 import {
     injectSentinels,
     injectStateSentinels,
@@ -177,9 +178,10 @@ export class Muya {
     }
 
     locale(object: ILocale) {
+        if (this.options.locale === object && this.i18n.lang === object.name) return;
         this.i18n.locale(object);
-        if (this.editor.scrollPage)
-            this._forceRender();
+        this.options.locale = object;
+        if (this.editor.scrollPage) refreshLocale(this);
     }
 
     /**
@@ -302,14 +304,43 @@ export class Muya {
 
         const selection = this.editor.selection.getSelection();
         const boundarySelection = recordSelection !== undefined ? recordSelection : selection;
+        const previousHistory = history.getHistory();
         // Record the lossless inverse as a standalone rebuild boundary BEFORE
         // applying the forward op, so the recorded `prevState` matches the doc
         // the inverse must restore. The forward apply dispatches a json-change,
         // so suppress History's own recording of it to avoid a duplicate entry.
         history.recordRebuild(op, prevState, boundarySelection);
-        history.suppressRecording(() => {
-            this.editor.rebuildContents(op, selection, 'api');
-        });
+        try {
+            history.suppressRecording(() => {
+                this.editor.rebuildContents(op, selection, 'api');
+            });
+        }
+        catch (error) {
+            // A block-tree rebuild can fail after the JSON state has already
+            // accepted the operation. Restore both state and history so the
+            // caller can safely remain in source mode and retry later.
+            history.setHistory(previousHistory);
+            jsonState.setContent(prevState);
+            try {
+                this.editor.scrollPage!.updateState(prevState);
+                if (selection?.anchor && selection.focus) {
+                    const anchorPath = [...selection.anchor.path];
+                    const focusPath = [...selection.focus.path];
+                    const anchorBlock = this.editor.scrollPage!.queryBlock([...anchorPath]);
+                    const focusBlock = this.editor.scrollPage!.queryBlock([...focusPath]);
+                    if (anchorBlock && focusBlock) {
+                        this.editor.selection.setSelection(
+                            { offset: selection.anchor.offset, path: anchorPath, block: anchorBlock as IAnchorFocusInfo['block'] },
+                            { offset: selection.focus.offset, path: focusPath, block: focusBlock as IAnchorFocusInfo['block'] },
+                        );
+                    }
+                }
+            }
+            catch (rollbackError) {
+                console.error('Failed to restore Muya after a content replacement error:', rollbackError);
+            }
+            throw error;
+        }
 
         return true;
     }
@@ -1641,6 +1672,7 @@ export class Muya {
     }
 
     destroy() {
+        this.eventCenter.emit('destroy');
         this.eventCenter.detachAllDomEvents();
         this.eventCenter.unsubscribeAll();
         // this.domNode[BLOCK_DOM_PROPERTY] = null;

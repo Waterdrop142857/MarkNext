@@ -1,0 +1,71 @@
+/* Opt in only application chrome. Editor content and its configurable fonts
+   retain their own typography. Heights are logical pixels; root zoom scales
+   every locale equally. Components override sizes through these variables. */
+.ui-controls :is(button, input, select, kbd),
+.ui-control {
+  font-family: var(--app-ui-font-family);
+  font-size: var(--ui-control-font-size, var(--app-ui-font-size));
+  line-height: var(--app-ui-control-line-height);
+}
+
+.ui-controls :is(button, input, select),
+.ui-control {
+  box-sizing: border-box;
+  height: var(--ui-control-height, var(--app-ui-control-height));
+  min-height: var(--ui-control-height, var(--app-ui-control-height));
+  padding-block: 0;
+}
+
+.ui-controls button,
+button.ui-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.ui-controls :is(input, select),
+:is(input, select).ui-control {
+  min-width: 0;
+  padding-inline: 8px;
+}
+
+/* Keep the native select and its keyboard/popup behavior, but replace the
+   closed control's platform appearance, intrinsic sizing and arrow. */
+.ui-controls select,
+select.ui-control {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 30px;
+  background-image: var(--app-ui-select-arrow);
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+}
+
+.ui-controls kbd {
+  display: inline-flex;
+  align-items: center;
+  height: var(--app-ui-control-line-height);
+}
+
+.ui-controls button > svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+.settings-dialog :is(button, input, select):not(.window-btn):hover:not(:disabled) {
+  box-shadow: var(--app-ui-control-hover-shadow);
+}
+
+.ui-scroll-region {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* Overlay scrollbars do not reserve space even with a stable gutter. Keep
+   controls clear of their painted area, including on older WebKit builds. */
+.ui-controls .ui-scroll-region {
+  padding-inline-end: var(--app-ui-scrollbar-space);
+}

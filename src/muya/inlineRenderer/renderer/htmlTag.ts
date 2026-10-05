@@ -6,6 +6,7 @@ import type Renderer from './index';
 import { BLOCK_TYPE6, CLASS_NAMES } from '../../config';
 import { snakeToCamel } from '../../utils';
 import sanitize, { isValidAttribute } from '../../utils/dompurify';
+import { sanitizePreviewStyle } from '../../utils/sanitizeHtmlPreview';
 
 function renderHtmlTagChildren(
     renderer: Renderer,
@@ -77,7 +78,8 @@ function buildRawHtmlTag(
 
     for (const attr of Object.keys(attrs)) {
         if (attr !== 'id' && attr !== 'class') {
-            const attrData = attrs[attr];
+            const raw = attrs[attr];
+            const attrData = attr.toLowerCase() === 'style' && raw ? sanitizePreviewStyle(raw) : raw;
             if (attrData && isValidAttribute(tag, attr, attrData))
                 data.attrs[attr] = attrData;
         }

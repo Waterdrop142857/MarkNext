@@ -39,6 +39,10 @@ export class FootnoteTool extends BaseFloat {
     private _hideTimer: ReturnType<typeof setTimeout> | null = null;
     private _toolContainer: HTMLDivElement = document.createElement('div');
 
+    protected override refreshLocale() {
+        this._render();
+    }
+
     constructor(muya: Muya, options: Partial<IBaseOptions> = {}) {
         const name = 'mu-footnote-tool';
         super(muya, name, Object.assign({}, defaultOptions, options));
@@ -77,11 +81,11 @@ export class FootnoteTool extends BaseFloat {
 
     private _render() {
         const hasFootnote = this._footnotes.has(this._identifier);
-        let previewText = `Can't find footnote with syntax [^${this._identifier}]:`;
+        let previewText = `${this.muya.i18n.t("Cannot find footnote definition")}: [^${this._identifier}]:`;
         if (hasFootnote) {
             const block = this._footnotes.get(this._identifier)!;
             const collected = collectFootnoteText(block);
-            previewText = collected || 'Input the footnote definition...';
+            previewText = collected || this.muya.i18n.t('Input the footnote definition...');
         }
 
         const textNode = h('span.text', previewText);
@@ -92,7 +96,7 @@ export class FootnoteTool extends BaseFloat {
                     click: (event: Event) => this._handleButtonClick(event, hasFootnote),
                 },
             },
-            hasFootnote ? 'Go to' : 'Create',
+            this.muya.i18n.t(hasFootnote ? 'Go to' : 'Create'),
         );
         const children = hasFootnote
             ? [textNode, button]

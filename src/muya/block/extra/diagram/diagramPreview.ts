@@ -1,6 +1,6 @@
 import type { Muya } from '../../../muya';
 import type { IDiagramState, TState } from '../../../state/types';
-import { fromEvent } from 'rxjs';
+import { fromEvent, type Subscription } from 'rxjs';
 import { CLASS_NAMES, PREVIEW_DOMPURIFY_CONFIG } from '../../../config';
 import { sanitize } from '../../../utils';
 import loadRenderer from '../../../utils/diagram';
@@ -29,21 +29,22 @@ function addViewBox(target: HTMLElement): boolean {
 // asynchronously — it's drawn from a theme callback after its font loads — so
 // the element and its `width`/`height` attributes aren't there synchronously.
 // Try once, then observe `target` until the sized `<svg>` appears.
-function ensureViewBox(target: HTMLElement): void {
-    if (addViewBox(target))
-        return;
-    const observer = new MutationObserver(() => {
-        if (addViewBox(target))
+function ensureViewBox(target: HTMLElement, signal: AbortSignal): Promise<void> {
+    if (signal.aborted || addViewBox(target)) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        const finish = (error?: Error) => {
             observer.disconnect();
+            clearTimeout(timer);
+            signal.removeEventListener('abort', abort);
+            if (error) reject(error);
+            else resolve();
+        };
+        const abort = () => finish();
+        const observer = new MutationObserver(() => { if (addViewBox(target)) finish(); });
+        const timer = setTimeout(() => finish(new Error('Diagram renderer did not produce an SVG')), 5000);
+        signal.addEventListener('abort', abort, { once: true });
+        observer.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['width', 'height'] });
     });
-    observer.observe(target, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['width', 'height'],
-    });
-    // Safety net so the observer can't leak if the svg never renders.
-    setTimeout(() => observer.disconnect(), 5000);
 }
 
 interface IRenderOptions {
@@ -54,6 +55,7 @@ interface IRenderOptions {
     mermaidTheme: string;
     plantumlServer: string;
     sequenceTheme: 'hand' | 'simple';
+    signal: AbortSignal;
 }
 
 async function renderDiagram({
@@ -64,8 +66,10 @@ async function renderDiagram({
     mermaidTheme,
     plantumlServer,
     sequenceTheme,
+    signal,
 }: IRenderOptions) {
     const render = await loadRenderer(type);
+    if (signal.aborted) return;
     const options = {};
     if (type === 'vega-lite') {
         Object.assign(options, {
@@ -86,7 +90,8 @@ async function renderDiagram({
         diagram.insertImgElement(target);
     }
     else if (type === 'vega-lite') {
-        await render(target, JSON.parse(code), options);
+        const result = await render(target, JSON.parse(code), options);
+        return () => result?.view?.finalize();
     }
     else if (type === 'flowchart' || type === 'sequence') {
         const diagram = render.parse(code);
@@ -96,7 +101,7 @@ async function renderDiagram({
         // width/height but NO viewBox, so the `max-width: 100%` style can only
         // clip a wide diagram, not scale it. Derive a viewBox from those pixel
         // dimensions (once the async draw completes) so it scales to fit.
-        ensureViewBox(target);
+        await ensureViewBox(target, signal);
     }
     else if (type === 'mermaid') {
         render.initialize({
@@ -105,6 +110,7 @@ async function renderDiagram({
             theme: mermaidTheme,
         });
         await render.parse(code);
+        if (signal.aborted) return;
         target.innerHTML = sanitize(code, PREVIEW_DOMPURIFY_CONFIG, true) as string;
         target.removeAttribute('data-processed');
         await render.run({
@@ -116,6 +122,16 @@ async function renderDiagram({
 class DiagramPreview extends Parent {
     private _code: string;
     private _type: string;
+    private _revision = 0;
+    private _key = '';
+    private _pending: Promise<void> = Promise.resolve();
+    private _controller?: AbortController;
+    private _stage?: HTMLElement;
+    private _cleanup?: () => void;
+    private _observer?: MutationObserver;
+    private _clickSubscription?: Subscription;
+    private _disposed = false;
+    private _onDestroy = () => this.dispose();
     static override blockName = 'diagram-preview';
 
     static create(muya: Muya, state: IDiagramState) {
@@ -138,9 +154,17 @@ class DiagramPreview extends Parent {
         this.attributes = {
             spellcheck: 'false',
             contenteditable: 'false',
+            'data-diagram-type': this._type,
         };
         this.createDomNode();
         this._attachDOMEvents();
+        this.muya.eventCenter?.on('destroy', this._onDestroy);
+        if (this.muya.domNode) {
+            this._observer = new MutationObserver(() => {
+                if (!this.muya.domNode.contains(this.domNode ?? null)) this.dispose();
+            });
+            this._observer.observe(this.muya.domNode, { childList: true, subtree: true });
+        }
         this.update();
     }
 
@@ -151,7 +175,7 @@ class DiagramPreview extends Parent {
 
     private _attachDOMEvents() {
         const clickObservable = fromEvent(this.domNode!, 'click');
-        clickObservable.subscribe(this.clickHandler.bind(this));
+        this._clickSubscription = clickObservable.subscribe(this.clickHandler.bind(this));
     }
 
     clickHandler(event: Event) {
@@ -165,45 +189,89 @@ class DiagramPreview extends Parent {
         cursorBlock?.setCursor(0, 0);
     }
 
-    async update(code = this._code) {
+    update(code = this._code): Promise<void> {
+        if (this._disposed) return Promise.resolve();
         const { i18n } = this.muya;
-        if (this._code !== code)
-            this._code = code;
-
+        const { mermaidTheme, vegaTheme, plantumlServer, sequenceTheme } = this.muya.options;
+        const theme = this._type === 'mermaid' ? mermaidTheme
+            : this._type === 'vega-lite' ? vegaTheme
+                : this._type === 'plantuml' ? plantumlServer
+                    : this._type === 'sequence' ? sequenceTheme : '';
+        const key = JSON.stringify([code, theme]);
+        if (key === this._key) return this._pending;
+        this._key = key;
+        this._code = code;
+        const revision = ++this._revision;
+        this._controller?.abort();
+        this._stage?.remove();
+        this._cleanup?.();
+        this._cleanup = undefined;
         if (code) {
-            this.domNode!.innerHTML = i18n.t('Loading...');
-            const { mermaidTheme, vegaTheme, plantumlServer, sequenceTheme } = this.muya.options;
+            const controller = this._controller = new AbortController();
+            this.domNode!.innerHTML = `<span data-muya-i18n="Loading...">${i18n.t('Loading...')}</span>`;
+            // Measurement-dependent renderers need a connected node. Each
+            // revision gets its own hidden target; stale callbacks never see
+            // the live preview target belonging to a later revision.
+            const stage = this._stage = document.createElement('div');
+            stage.className = 'mu-diagram-staging';
+            stage.style.cssText = 'position:absolute;width:100%;visibility:hidden;pointer-events:none';
+            this.domNode!.appendChild(stage);
             const { _type: type } = this;
-
-            try {
-                await renderDiagram({
-                    target: this.domNode!,
-                    code,
-                    type,
-                    mermaidTheme,
-                    vegaTheme,
-                    plantumlServer,
-                    sequenceTheme,
-                });
-            }
-            catch (error) {
-                const detail
-                    = error instanceof Error ? error.message : String(error);
-                debug.error(`render ${type} diagram failed: ${detail}`);
-                this.domNode!.innerHTML = `<div class="mu-diagram-error">&lt; ${i18n.t(
-                    'Invalid Diagram Code',
-                )} &gt;<div class="mu-diagram-error-detail">${sanitize(
-                    detail,
-                    PREVIEW_DOMPURIFY_CONFIG,
-                    true,
-                )}</div></div>`;
-            }
+            this._pending = (async () => {
+                try {
+                    const cleanup = await renderDiagram({
+                        target: stage,
+                        code,
+                        type,
+                        mermaidTheme,
+                        vegaTheme,
+                        plantumlServer,
+                        sequenceTheme,
+                        signal: controller.signal,
+                    });
+                    if (revision !== this._revision || this._disposed) {
+                        cleanup?.();
+                        return;
+                    }
+                    this._cleanup = cleanup || undefined;
+                    this.domNode!.replaceChildren(...stage.childNodes);
+                    this._stage = undefined;
+                }
+                catch (error) {
+                    if (revision !== this._revision || this._disposed) return;
+                    this._key = '';
+                    const detail = error instanceof Error ? error.message : String(error);
+                    debug.error(`render ${type} diagram failed: ${detail}`);
+                    this.domNode!.innerHTML = `<div class="mu-diagram-error">&lt; <span data-muya-i18n="Invalid Diagram Code">${i18n.t(
+                        'Invalid Diagram Code',
+                    )}</span> &gt;<div class="mu-diagram-error-detail">${sanitize(
+                        detail,
+                        PREVIEW_DOMPURIFY_CONFIG,
+                        true,
+                    )}</div></div>`;
+                }
+                finally { stage.remove(); }
+            })();
         }
         else {
-            this.domNode!.innerHTML = `<div class="${CLASS_NAMES.MU_EMPTY}">&lt; ${i18n.t(
+            this.domNode!.innerHTML = `<div class="${CLASS_NAMES.MU_EMPTY}">&lt; <span data-muya-i18n="Empty Diagram">${i18n.t(
                 'Empty Diagram',
-            )} &gt;</div>`;
+            )}</span> &gt;</div>`;
+            this._pending = Promise.resolve();
         }
+        return this._pending;
+    }
+
+    dispose() {
+        if (this._disposed) return;
+        this._disposed = true;
+        this._revision += 1;
+        this._controller?.abort();
+        this._stage?.remove();
+        this._cleanup?.();
+        this._observer?.disconnect();
+        this._clickSubscription?.unsubscribe();
+        this.muya.eventCenter?.off('destroy', this._onDestroy);
     }
 }
 

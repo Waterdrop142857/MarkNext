@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { useI18n } from "../i18n";
+import { en } from "../muya/locales/en";
+import { zhCN } from "../muya/locales/zh-CN";
 import { Muya, type IMuyaOptions } from "../muya";
 import { LINK_SELECTOR } from "../muya/editor/linkMouseEvents";
 import { getLinkInfo } from "../muya/utils/getLinkInfo";
+import { createDocumentImageResolver } from "../services/documentImages";
+import { BLOCK_DOM_PROPERTY } from "../muya/config";
+import type HTMLPreview from "../muya/block/commonMark/html/htmlPreview";
 import {
   createWebKitSelectionPainter,
   isNonChromiumWebKit,
@@ -13,11 +19,15 @@ import {
 const props = withDefaults(
   defineProps<{
     modelValue?: string;
+    active?: boolean;
     options?: Partial<IMuyaOptions>;
+    documentPath?: string | null;
   }>(),
   {
     modelValue: "",
+    active: true,
     options: () => ({}),
+    documentPath: null,
   },
 );
 
@@ -32,18 +42,9 @@ let editor: Muya | null = null;
 let domNode: HTMLElement | null = null;
 let internalChange = false;
 let webkitPainter: WebKitSelectionPainter | null = null;
-
-function handleKeydown(event: KeyboardEvent) {
-  const isModA = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a";
-  if (!isModA || !editor) return;
-
-  // Always select the whole document on the first Ctrl+A, rather than Muya's
-  // block-first escalation (first selects current paragraph).
-  event.preventDefault();
-  event.stopPropagation();
-  editor.selectAllDocument();
-  webkitPainter?.schedule();
-}
+const { locale } = useI18n();
+const editorLocale = () => locale.value === "zh-CN" ? zhCN : en;
+const images = createDocumentImageResolver(() => props.documentPath);
 
 async function openExternal(href: string) {
   try {
@@ -103,14 +104,17 @@ onMounted(() => {
   editor = new Muya(placeholder, {
     markdown: initialMarkdown,
     ...props.options,
+    locale: editorLocale(),
+    resolveImageSrc: images.resolve,
+    prepareImageSrc: images.prepare,
   });
   domNode = editor.domNode;
-  domNode.addEventListener("keydown", handleKeydown);
   domNode.addEventListener("dblclick", handleDblClick);
 
   editor.on("json-change", () => {
-    if (!editor) return;
+    if (!editor || !props.active) return;
     const markdown = editor.getMarkdown();
+    if (markdown === props.modelValue) return;
     internalChange = true;
     emit("update:modelValue", markdown);
     void nextTick(() => {
@@ -121,40 +125,77 @@ onMounted(() => {
 
   editor.on("selection-change", (selection: unknown) => {
     emit("selection-change", selection);
+    webkitPainter?.schedule();
   });
 
   editor.init();
   webkitPainter = createWebKitSelectionPainter(domNode, wrapperRef.value);
-  webkitPainter?.start();
+  if (props.active) webkitPainter?.start();
   emit("ready", editor);
 });
 
 watch(
   () => props.modelValue,
   (value) => {
-    if (!editor || internalChange) return;
+    if (!editor || !props.active || internalChange) return;
     const current = editor.getMarkdown();
     if (value !== current) editor.setContent(value ?? "");
+  },
+);
+
+watch(locale, () => {
+  if (!editor) return;
+  editor.flush();
+  editor.locale(editorLocale());
+  webkitPainter?.schedule();
+});
+
+// Appearance changes update CSS variables on the existing editor root. Muya's
+// default setOptions path preserves the document tree and undo/redo history.
+watch(() => props.options, value => { editor?.setOptions(value); }, { deep: true });
+
+watch(() => props.documentPath, () => {
+  images.reset();
+  if (!editor) return;
+  editor.invalidateImageCache();
+  for (const element of editor.domNode.querySelectorAll<HTMLElement>(".mu-html-preview")) {
+    (element[BLOCK_DOM_PROPERTY] as HTMLPreview | undefined)?.update();
+  }
+});
+
+watch(
+  () => props.active,
+  (active) => {
+    if (!active) {
+      webkitPainter?.stop();
+      return;
+    }
+    webkitPainter?.start();
+    webkitPainter?.schedule();
   },
 );
 
 onBeforeUnmount(() => {
   webkitPainter?.stop();
   webkitPainter = null;
-  domNode?.removeEventListener("keydown", handleKeydown);
   domNode?.removeEventListener("dblclick", handleDblClick);
   editor?.destroy();
   editor = null;
   domNode = null;
+  images.reset();
 });
 
 defineExpose({
   getMarkdown: () => editor?.getMarkdown() ?? "",
   setContent: (content: string) => editor?.setContent(content),
+  flush: () => editor?.flush(),
+  focus: () => editor?.focus(),
+  undo: () => editor?.undo(),
+  redo: () => editor?.redo(),
   editor,
 });
 </script>
 
 <template>
-  <div ref="wrapperRef" class="muya-editor" />
+  <div ref="wrapperRef" class="muya-editor ui-scroll-region" />
 </template>

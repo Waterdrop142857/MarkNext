@@ -410,10 +410,10 @@ export const DATA_URL_REG
     = /^data:image\/[\w+-]+(?:;[\w-]+=[\w-]+|;base64)*,[a-zA-Z0-9+/]+={0,2}$/;
 export const PREVIEW_DOMPURIFY_CONFIG = {
     // do not forbid `class` because `code` element use class to present language.
-    // `style` is allowed (matching EXPORT_DOMPURIFY_CONFIG) so inline-styled HTML
-    // blocks render the same in the editor as on export; DOMPurify still
-    // sanitizes the style values themselves.
-    FORBID_ATTR: ['contenteditable'],
+    // DOMPurify sanitizes markup, not CSS. HTMLPreview separately restricts
+    // inline declarations and contains painting/layout inside the preview.
+    FORBID_ATTR: ['contenteditable', 'autofocus'],
+    FORBID_TAGS: ['style', 'link', 'base', 'meta', 'animate', 'animateMotion', 'animateTransform', 'set'],
     ALLOW_DATA_ATTR: false,
     USE_PROFILES: {
         html: true,

@@ -1,6 +1,10 @@
 import type { TState } from './state/types';
 
 export interface IMuyaOptions {
+    /** Host-specific local image URLs; undefined preserves the engine resolver. */
+    resolveImageSrc?: (source: string) => string | undefined;
+    /** Authorize a local asset before the WebView requests it. */
+    prepareImageSrc?: (source: string) => Promise<void>;
     fontSize: number;
     lineHeight: number;
     editorFontFamily?: string;

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from "../i18n";
 import type { AppMenu } from "../config/menus";
 
 withDefaults(
@@ -20,21 +21,22 @@ defineEmits<{
 </script>
 
 <template>
-  <nav class="menu-bar" @selectstart.prevent>
+  <nav class="menu-bar ui-controls" @selectstart.prevent>
     <div
       v-for="menu in menus"
       :key="menu.id"
       class="menu-item"
-      @click.stop="$emit('toggle', menu.id)"
+      @click.stop="menu.command ? $emit('command', menu.command) : $emit('toggle', menu.id)"
     >
       <button
         type="button"
         class="menu-trigger"
+        :aria-haspopup="menu.command ? 'dialog' : undefined"
         :class="{ active: openMenuId === menu.id }"
       >
         {{ menu.label }}
       </button>
-      <div v-if="openMenuId === menu.id" class="menu-dropdown">
+      <div v-if="!menu.command && openMenuId === menu.id" class="menu-dropdown">
         <button
           v-for="item in menu.items"
           :key="item.id"
@@ -44,13 +46,16 @@ defineEmits<{
           :disabled="item.disabled"
           @click.stop="$emit('command', item.id)"
         >
-          {{
-            item.id === "toggleMode"
-              ? isSourceMode
-                ? "所见即所得"
-                : "源码模式"
-              : item.label
-          }}
+          <span class="menu-command-label">
+            {{
+              item.id === "toggleMode"
+                ? isSourceMode
+                  ? t("command.wysiwyg")
+                  : t("command.toggleMode")
+                : item.label
+            }}
+          </span>
+          <span v-if="item.shortcut" class="menu-command-shortcut">{{ item.shortcut }}</span>
         </button>
       </div>
     </div>

@@ -31,6 +31,10 @@ export class TableRowColumMenu extends BaseFloat {
     private _block: TableBodyCell | null = null;
     private _tableBarContainer: HTMLDivElement = document.createElement('div');
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-table-bar-tools';
         const opts = Object.assign({}, defaultOptions, options);

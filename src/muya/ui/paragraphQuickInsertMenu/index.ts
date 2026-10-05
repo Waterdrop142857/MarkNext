@@ -39,6 +39,11 @@ export class ParagraphQuickInsertMenu extends BaseScrollFloat {
     public override renderArray: IQuickInsertMenuItem['children'] = [];
     private _renderData: IQuickInsertMenuItem[] = [];
 
+    protected override refreshLocale() {
+        if (this._block && this.status) this._search(this._block.text.substring(1));
+        else this.render();
+    }
+
     constructor(muya: Muya) {
         const name = 'mu-quick-insert';
         super(muya, name);

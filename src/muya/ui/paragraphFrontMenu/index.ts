@@ -54,6 +54,10 @@ export class ParagraphFrontMenu extends BaseFloat {
     private _block: Parent | null = null;
     private _frontMenuContainer: HTMLDivElement = document.createElement('div');
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-front-menu';
         const opts = Object.assign({}, defaultOptions, options);

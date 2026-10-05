@@ -27,6 +27,10 @@ export class PreviewToolBar extends BaseFloat {
     private _block: HTMLBlock | MathBlock | null = null;
     private _iconContainer: HTMLDivElement = document.createElement('div');
 
+    protected override refreshLocale() {
+        this.render();
+    }
+
     constructor(muya: Muya, options = {}) {
         const name = 'mu-preview-tools';
         const opts = Object.assign({}, defaultOptions, options);
@@ -94,7 +98,7 @@ export class PreviewToolBar extends BaseFloat {
                 itemSelector,
                 {
                     attrs: {
-                        title: `${i.tooltip}`,
+                        title: this.muya.i18n.t(i.tooltip),
                     },
                     on: {
                         click: (event) => {

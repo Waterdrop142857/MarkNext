@@ -22,9 +22,10 @@ const pos = ref({ left: props.x, top: props.y });
 function updatePosition() {
   if (!menuRef.value) return;
   const rect = menuRef.value.getBoundingClientRect();
+  const scale = Number(document.documentElement.style.getPropertyValue("--app-ui-zoom")) || 1;
   const margin = 8;
-  const left = Math.min(props.x, window.innerWidth - rect.width - margin);
-  const top = Math.min(props.y, window.innerHeight - rect.height - margin);
+  const left = Math.min(props.x, window.innerWidth / scale - rect.width / scale - margin);
+  const top = Math.min(props.y, window.innerHeight / scale - rect.height / scale - margin);
   pos.value = {
     left: Math.max(margin, left),
     top: Math.max(margin, top),
@@ -51,19 +52,26 @@ function onWindowEvent() {
   emit("close");
 }
 
+function onWindowScroll(event: Event) {
+  // At high zoom the menu scrolls internally. Keep it open while users reach
+  // lower items; scrolling the document still dismisses it.
+  if (event.target instanceof Node && menuRef.value?.contains(event.target)) return;
+  emit("close");
+}
+
 onMounted(() => {
   void nextTick(updatePosition);
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("mousedown", onOutsideMouseDown, true);
   window.addEventListener("resize", onWindowEvent);
-  window.addEventListener("scroll", onWindowEvent, true);
+  window.addEventListener("scroll", onWindowScroll, true);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onKeydown);
   window.removeEventListener("mousedown", onOutsideMouseDown, true);
   window.removeEventListener("resize", onWindowEvent);
-  window.removeEventListener("scroll", onWindowEvent, true);
+  window.removeEventListener("scroll", onWindowScroll, true);
 });
 
 watch(
@@ -78,8 +86,8 @@ watch(
   <Teleport to="body">
     <div
       ref="menuRef"
-      class="fluent-menu"
-      :style="{ left: `${pos.left}px`, top: `${pos.top}px` }"
+      class="fluent-menu ui-controls"
+      :style="{ left: `${pos.left}px`, top: `${pos.top}px`, maxHeight: 'calc(var(--app-viewport-height, 100vh) - 16px)', overflowY: 'auto' }"
       @contextmenu.prevent
       @mousedown.stop
     >
@@ -102,4 +110,3 @@ watch(
     </div>
   </Teleport>
 </template>
-
