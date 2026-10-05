@@ -1,6 +1,6 @@
 # MarkNext
 
-###### **此项目由DeepSeek辅助开发***
+###### **此项目由AI辅助开发**
 
 MarkNext 是一个基于 **Tauri 2 + Vue 3 + TypeScript** 的 WYSIWYG Markdown 编辑器。编辑/渲染核心来自 MarkText 的 Muya / Muyajs，已 vendor 到 `src/muya`，便于深度定制。
 
