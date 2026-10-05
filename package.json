@@ -3,9 +3,21 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@11.28.3",
+  "engines": { "node": ">=24.0.0" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "vue-tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "test": "pnpm test:unit && pnpm test:document-actions",
+    "test:unit": "vitest run",
+    "test:e2e": "pnpm build && playwright test",
+    "check": "node scripts/check.mjs",
+    "check:frontend": "node scripts/check.mjs --frontend",
+    "check:native": "node scripts/check.mjs --native",
+    "test:document-actions": "node --test tests/document-actions.test.cjs",
+    "test:shortcuts": "vitest run src/composables/__tests__/shortcuts.spec.ts",
+    "test:selection": "vitest run src/components/editor/__tests__/webkitSelectionPainter.spec.ts",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -45,11 +57,19 @@
     "webfontloader": "^1.6.28"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@tauri-apps/cli": "^2",
     "@types/codemirror": "^5.60.18",
+    "@types/node": "^22.20.4",
+    "@types/plantuml-encoder": "^1.4.2",
+    "@types/prismjs": "^1.26.6",
+    "@types/turndown": "^5.0.6",
     "@vitejs/plugin-vue": "^5.2.1",
+    "happy-dom": "20.10.6",
+    "jsdom": "27.4.0",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
+    "vitest": "^4.1.11",
     "vue-tsc": "^2.1.10"
   }
 }

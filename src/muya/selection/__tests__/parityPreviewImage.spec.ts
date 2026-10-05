@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLASS_NAMES } from '../../config';
 import { Muya } from '../../muya';
+import type { IMuyaOptions } from '../../types';
 
 // PARITY SCOREBOARD — gap PG10 (file PG09/PG14, "Space preview").
 //
@@ -41,10 +42,10 @@ afterEach(() => {
         delete (window as Partial<Window>).MUYA_VERSION;
 });
 
-function bootMuya(markdown: string): Muya {
+function bootMuya(markdown: string, options: Partial<IMuyaOptions> = {}): Muya {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const muya = new Muya(host, { markdown } as ConstructorParameters<typeof Muya>[1]);
+    const muya = new Muya(host, { markdown, ...options });
     muya.init();
     bootedMuyas.push(muya);
     return muya;
@@ -53,8 +54,8 @@ function bootMuya(markdown: string): Muya {
 // Boot an image and inject the loaded <img> the renderer would have produced
 // (the async image-load path never resolves under happy-dom). Returns the muya
 // instance and the <img>.
-function bootImage(src: string): { muya: Muya; img: HTMLImageElement } {
-    const muya = bootMuya(`![alt](${src})`);
+function bootImage(src: string, options: Partial<IMuyaOptions> = {}): { muya: Muya; img: HTMLImageElement } {
+    const muya = bootMuya(`![alt](${src})`, options);
     const wrapper = muya.domNode.querySelector<HTMLElement>(
         `span.${CLASS_NAMES.MU_INLINE_IMAGE}`,
     )!;
@@ -74,6 +75,21 @@ function selectImage(img: HTMLImageElement): void {
 }
 
 describe('parity PG10: Space previews a selected image', () => {
+    it('uses document resource context for Space preview', () => {
+        const url = 'asset://localhost/%2Fdocs%2Fimages%2Fpic.png';
+        const { muya, img } = bootImage('images/pic.png', { resolveImageSrc: () => url });
+        selectImage(img);
+        const handler = vi.fn(); muya.on('preview-image', handler);
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+        expect(handler).toHaveBeenCalledWith({ data: url });
+    });
+    it('uses the same context for modifier-click image preview', () => {
+        const url = 'asset://localhost/%2Fdocs%2Fimages%2Fpic.png';
+        const { muya, img } = bootImage('images/pic.png', { resolveImageSrc: () => url });
+        const handler = vi.fn(); muya.on('format-click', handler);
+        img.dispatchEvent(new MouseEvent('click', { ctrlKey: true, bubbles: true, cancelable: true }));
+        expect(handler).toHaveBeenCalledWith(expect.objectContaining({ formatType: 'image', data: url }));
+    });
     it(
         'PG10: pressing Space with an image selected emits preview-image',
         () => {

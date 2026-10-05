@@ -180,7 +180,7 @@ describe('diagramPreview — renderer theme pass-through', () => {
     // The constructor fires update() unawaited, so assert on lastCall — our
     // explicit update() (after mutating the option) is always the latest.
     it('passes sequenceTheme into the sequence renderer drawSVG options (simple)', async () => {
-        const drawSVG = vi.fn();
+        const drawSVG = vi.fn((target: HTMLElement, _options: unknown) => { target.innerHTML = '<svg width="10" height="10"></svg>'; });
         loadRendererMock.mockResolvedValue({ parse: () => ({ drawSVG }) });
 
         const { preview, muya } = makePreview('Alice->Bob: Hi', 'sequence');
@@ -192,7 +192,7 @@ describe('diagramPreview — renderer theme pass-through', () => {
     });
 
     it('defaults sequenceTheme to the muya option value (hand) when unchanged', async () => {
-        const drawSVG = vi.fn();
+        const drawSVG = vi.fn((target: HTMLElement, _options: unknown) => { target.innerHTML = '<svg width="10" height="10"></svg>'; });
         loadRendererMock.mockResolvedValue({ parse: () => ({ drawSVG }) });
 
         const { preview } = makePreview('Alice->Bob: Hi', 'sequence');

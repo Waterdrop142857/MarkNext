@@ -1,0 +1,4 @@
+/* A real test fixture. Preview sanitization must prevent it from being loaded. */
+.app-shell {
+  display: none !important;
+}

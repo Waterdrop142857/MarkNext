@@ -8,6 +8,9 @@ dist/
 dist-ssr/
 release/
 out/
+*.tsbuildinfo
+test-results/
+playwright-report/
 
 # Tauri / Rust
 src-tauri/target/

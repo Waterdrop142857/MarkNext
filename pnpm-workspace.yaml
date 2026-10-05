@@ -1,4 +1,4 @@
 allowBuilds:
   esbuild: true
 blockExoticSubdeps: false
-storeDir: /home/Sun/Projects/MDEditor/.pnpm-store
+storeDir: ../.pnpm-store
