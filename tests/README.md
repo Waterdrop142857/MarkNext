@@ -1,0 +1,122 @@
+# 自动化测试与质量检查
+
+统一入口是 `pnpm check`。任何检查失败立即返回非零退出码，后续阶段不继续执行；不自动重试失败测试，Vitest 和浏览器测试不允许 `.only`，Vitest 的未处理异常会令流程失败。浏览器测试还会检查未捕获异常、console.error 与意外的外部网络请求。
+
+## 环境准备
+
+需要 Node.js 24+、项目固定的 pnpm 11.28.3、Rust stable（含 rustfmt/clippy）以及当前平台的 Tauri 系统依赖。使用锁文件安装：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium webkit
+```
+
+在受支持的 Linux 系统（CI 使用 Ubuntu 24.04）可以一次安装浏览器及系统依赖：
+
+```bash
+pnpm exec playwright install --with-deps chromium webkit
+```
+
+新增 jsdom 27.4.0、@playwright/test 1.58.2 前，已核对 npm 官方 registry 的名称、版本、repository、tarball/integrity，以及官方源码 package.json 的名称与版本。固定精确版本并记录锁文件，后续增加/升级依赖也应先确认真实存在、来源可信。
+
+## 命令
+
+| 命令 | 范围 |
+| --- | --- |
+| `pnpm check` | 类型检查、全部前端测试、Node 文档动作测试、Rust 检查、Tauri 发布二进制、Chromium/WebKit 回归 |
+| `pnpm check:frontend` | 类型检查、全部前端与 Node 测试、生产前端构建、两个浏览器回归 |
+| `pnpm check:native` | Rust fmt/check/test/clippy、实际 Tauri 发布二进制构建、plain release check/clippy |
+| `pnpm test` | 全部 Vitest + Node 文档动作测试 |
+| `pnpm test:e2e` | 先构建生产前端，再运行全部浏览器回归 |
+| `pnpm test:unit` | 所有 `src/**/*.spec.ts`，不含历史审计复现或 Node runner 文件 |
+| `pnpm test:document-actions` | Node runner 的完整文档动作与窗口关闭测试 |
+
+单文件定位失败可使用 `pnpm exec vitest run <文件>`。浏览器单项目诊断可使用 `pnpm exec playwright test --project=webkit` 或 `--project=chromium`；这两条诊断命令要求已有 dist。最终验收应运行统一流程，不能用单文件通过替代完整结果。
+
+`scripts/check.mjs` 负责跨平台串行执行和退出码传播，支持 pnpm JS 启动器与 Unix/standalone 启动器。Rust 命令使用 `--locked`；Tauri CLI 也将该参数传给 Cargo，实际验证 beforeBuildCommand、production 资源、release feature flags 和链接。流程使用 `--no-bundle`，验证可执行文件，不依赖签名、商店账户或安装器打包环境。
+
+## 测试层次与 P1 回归
+
+- Vitest 保留原测试声明的 happy-dom/jsdom 环境。安全净化用例使用 jsdom；happy-dom 对此版本 DOMPurify 的支持不完整，不以它证明净化安全。CSS inline 导入启用真实 KaTeX、Prism、GitHub Markdown 和 exportStyle 内容，避免空字符串产生误通过。
+- `documentOpen.spec.ts` 使用真实 Muya、真实 workspace/actions，并控制 RAF 与 IPC 完成时序。覆盖读取期间排队编辑后的保存/丢弃/取消、已批准版本不重复询问、确认期间的新编辑、读取失败和 generation 变化；读取只执行一次。另覆盖新建、关闭窗口和退出时，确认期间新输入的内容不会被此前的丢弃选择覆盖。
+- `htmlPreviewIsolation.spec.ts` 使用真实 Muya，验证大小写样式表、危险行内布局、SVG 动画/事件属性、允许的普通样式，以及源 Markdown 不被净化改写。行内 HTML 与块预览使用同一 CSS 策略。
+- Node 文档动作测试覆盖新建、打开、关闭、退出与系统关闭的统一保存保护、保存失败、重复操作和监听器生命周期。
+- 浏览器回归挂载真实 Vue 应用与编辑器，通过 Tauri SDK 的官方 mocks 控制磁盘和对话框 IPC；Chromium/WebKit 分别验证延迟读取期间的实际输入、三种确认选择、CSS 净化与真实布局/菜单点击，以及生产 dist 隐藏开发者工具、正常启动。页面只能访问本地测试服务器，外部请求会被阻止并令测试失败。
+- `/tests/e2e/fixtures/host-style.css` 是真实存在的测试样式表。浏览器测试会确认原始 HTML 的 link 被移除，且没有请求该文件；不会下载外部“恶意 CSS”。
+- `mermaidTheme.spec.ts` 使用真实 Mermaid，覆盖流程图、时序图、类图、状态图和 ER 图。验证暗色连接线及箭头在编辑器与浮层背景上达到 3:1 对比度，时序消息文字达到 4.5:1；亮色、暗色与跟随系统之间切换保留原 SVG/编辑器实例，恢复浅色配色，保留显式 linkStyle 线条颜色和空心标记语义。
+- P2 的 SourceEditor/search 单元测试覆盖空查询、无关选区、内容变更后的偏移、大小写与整词选项、替换后下一匹配、模式切换保留历史以及新文档/外部内容使旧历史失效。
+- `diagramRevision.spec.ts` 用受控 renderer 加载和延迟绘制验证旧成功/失败、清空、销毁、移除、重复请求以及 Vega view.finalize 清理。每个版本在独立目标渲染，断言晚到回调无法改写最新预览。
+- `documentImages.spec.ts` 覆盖 POSIX/Windows/UNC、上级目录、中文、空格及编码路径，另存为后的目录更新，权限请求合并、先授权后加载和失败重试。Rust 单元测试验证只接受存在的图片文件，并拒绝非图片、目录、缺失文件和伪装扩展名的符号链接。
+- `p2.spec.ts` 在两种浏览器里验证真实应用的搜索、源码历史与文件/模式边界，行内/引用/HTML 图片目录更新，以及 640×480、800×500、1024×720 下两种编辑模式的内部滚动。图片的原生 convertFileSrc 在测试入口映射到本地 SVG fixture，磁盘授权由 IPC mock 记录；这不是原生 asset 协议的端到端测试。
+
+`tests/e2e/app.html` 是 Vite 开发服务器下的测试入口，先准备 mock 再导入真实 src/main。生产构建只从 index.html 进入，不包含该入口及原生 mocks。另一个测试服务器用 vite preview 提供真实生产 dist。二者端口固定为 4173/4174，严格禁止端口自动切换和复用已有服务，避免测试误连其他实例。
+
+## CI
+
+`.github/workflows/check.yml` 在 push/pull_request 时执行：
+
+1. Ubuntu 24.04 前端任务：冻结依赖、安装 Chromium/WebKit 与系统依赖、运行 `check:frontend`，上传报告。
+2. Ubuntu、Windows、macOS 三个平台的原生任务：安装平台依赖、冻结 pnpm/Cargo 锁文件，运行 `check:native`。
+
+使用只读仓库权限、任务超时和同分支旧任务取消。矩阵采用 fail-fast=false，以便某个平台失败时仍得到其他平台结果；任务内部保持失败立即退出。CI 配置已在本地校验 YAML，远端三平台执行结果要以提交后的 GitHub Actions 为准。
+
+## 报告
+
+统一流程输出：
+
+- `test-results/vitest.xml`：Vitest JUnit。
+- `test-results/document-actions.xml`：Node runner JUnit。
+- `test-results/browser.xml`：浏览器 JUnit。
+- `playwright-report/index.html`：浏览器 HTML 报告。
+- 浏览器失败时的截图与 trace：位于 test-results 对应用例目录。
+
+这些产物已加入 gitignore。查看 trace 使用 `pnpm exec playwright show-trace <trace.zip>`。历史 `audit/repros.ts` 已将 P1/P2 输入改为正确行为断言，可独立运行，但不替代 src 和 tests/e2e 中的正式验收测试。
+
+## Arch Linux 的 Playwright WebKit
+
+本机 ICU 78 与下载的 Ubuntu WebKit 所需 ICU 74 有不同的动态库名和版本符号；不要用软链接伪装版本。Playwright 的受支持 Ubuntu 环境可由 `install --with-deps` 准备；Arch 可选择受支持容器，或独立兼容运行目录。
+
+本次本地验证从 Ubuntu 官方仓库取得 libicu74 74.2-1ubuntu3.1、libflite1 2.2-6build3，只解包到 `/tmp/marknext-playwright-libs`，没有安装或替换系统库。由于 Playwright 打包启动器会覆盖 LD_LIBRARY_PATH，临时 `/tmp/marknext-webkit-run.sh` 设置对应 WebKit 路径与兼容库后启动原浏览器二进制。
+
+该环境下可执行：
+
+```bash
+MARKNEXT_WEBKIT_EXECUTABLE=/tmp/marknext-webkit-run.sh pnpm check
+```
+
+MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、用例与断言完全相同；缺少运行库依旧失败，不会跳过 WebKit。临时文件可能被系统清理，之后需重新准备兼容环境。默认 CI 不使用这个覆盖。
+
+## 覆盖边界
+
+浏览器模拟的是 Tauri IPC，不是 OS 的真实对话框。原生矩阵验证编译、Rust 单元测试和发布二进制链接；不宣称已经自动验证所有操作系统窗口行为、安装器、签名或整库覆盖率。实际 WebKitGTK 窗口、系统剪贴板权限和安装包交互仍需要对应平台验收。
+
+## P2 与窗口布局的手动验收
+
+1. 打开含重复 `foo` 的文档，在两种编辑模式搜索后清空查询，确认替换按钮不可用；编辑前缀后替换仍只改变当前匹配。关闭文档、打开另一份文件，F3/替换应使用新文档。
+2. 源码模式先选中无关 `bar` 再点击替换，内容应不变；选择有效 `foo` 可替换并跳到下一处。用 `fooX` 替换 `foo` 两次，应修改原来的两处匹配。
+3. 源码编辑后往返切换模式，Ctrl+Z/重做应有效；在所见即所得模式修改内容后再进入源码，旧源码历史应失效。打开新文档不继承旧文件的撤销记录。
+4. 准备 Markdown 文件和真实图片，使用 `images/a.png`、`../shared/图片.png`、绝对图片路径、引用图片及 HTML img；在真实 Tauri 窗口确认显示。另存为到另一个目录前，先在新目录准备对应图片；确认相对资源改指向新目录。无路径的新文档不猜测相对图片的基准目录。
+5. 连续修改有效图表、立即清空/删掉图表或关闭文档；旧图和旧错误不应晚到覆盖新结果，切换暗色主题应继续清晰。
+6. 长文档下将原生窗口缩到最小尺寸，再放大/缩小；分别检查所见即所得和源码模式。滚轮/拖动滚动条只移动编辑区域，标题栏、菜单和底部状态栏保持原位，长状态文字应截断显示。
+
+
+## 中英文 i18n 验收
+
+`src/i18n/__tests__` 检查词典键与插值参数一致性、系统语言匹配、持久化失败、快捷键冲突和原生按钮返回值。Muya locale 回归验证同一块树、跨段落选区、滚动、输入焦点、已有预览节点与浮动菜单；异步图表回归验证改语言不重启渲染。`tests/e2e/i18n.spec.ts` 在 Chromium/WebKit 检查应用界面、语言偏好、英文保存询问、两种模式的实例/撤销历史和预览节点保留。这些测试已包含在 `pnpm check`。
+
+原生手动验收：
+
+1. 点击菜单栏“设置”，在“外观 → 界面语言”选择 English 并应用，检查菜单、标题栏按钮、底部状态栏、查找/替换、右键菜单与快捷键设置；切回简体中文，确认所有应用文案同步更新。
+2. 编辑未保存的文件后切换语言，再新建/关闭/退出。分别选择保存、不保存和取消，确认按钮文案和实际行为一致。检查打开/另存为窗口标题以及应用错误提示。
+3. 在两种模式编辑，切换语言，再撤销/重做；检查正文、光标/选区、滚动位置与公式/图表显示。语言切换不会修改 Markdown 文件或重建编辑器。
+4. 关闭并重新启动，确认保留所选语言。无已保存偏好时，按系统语言列表的第一个中/英语言选择；中文地区标签统一使用简体中文，其余语言回退英语。
+
+应用可控制的原生对话框标题、消息和自定义按钮已翻译；系统文件选择器自身的控件，以及操作系统/第三方库返回的诊断文字，保持其原始语言。
+
+## 分类设置验收
+
+`preferences.spec.ts` 覆盖旧配置继承、单次持久化、存储失败的原子行为、输入校验和字体引用；`fileEncoding.spec.ts` 验证默认编码捕获、取消打开、另存为保留格式及并发写入隔离。Rust 测试检查明确的 UTF-8/UTF-16 字节、BOM 优先识别、emoji/中文往返、非法编码报错和真实临时文件读写。`settings.spec.ts` 在 Chromium/WebKit 覆盖分类导航、草稿取消/应用/重启、两种模式字体与撤销历史、75%/125%/200% 缩放、快捷键录制与编码 IPC，并验证高缩放下菜单内部滚动、窗口边缘调整区域及选区与文本的几何对齐。浏览器磁盘为 mock，实际字节格式由 Rust 测试验证。
+
+手动检查：点击菜单栏“设置”直接打开浮窗，切换四个左侧分类并修改设置；取消后重开确认未应用。设置字号、字体、缩放后应用，检查正文、代码块、源码模式和浅色/暗色浮窗；撤销/重做应保持可用。使用 UTF-16 和 UTF-8 BOM 新建保存含中文/emoji 的文档，以其他编辑器确认编码，再修改默认编码后保存已打开文件，确认其原格式保留。缩小窗口后检查内部滚动、按钮可达、标题栏和状态栏位置；重新启动确认偏好保留。
+
+浏览器截图与 trace 写入 `test-results/browser/`，浏览器 JUnit 写入 `test-results/browser.xml`。Playwright 清理自己的输出时不再删除同目录下的 `vitest.xml` 和 `document-actions.xml`，CI 会保留全部检查报告。
