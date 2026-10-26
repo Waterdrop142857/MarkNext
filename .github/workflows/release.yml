@@ -1,0 +1,199 @@
+name: Build and publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to build, for example v0.1.0 or v0.2.0-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      commit: ${{ steps.version.outputs.commit }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+          persist-credentials: false
+      - name: Validate tag and application versions
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess, tomllib
+          from pathlib import Path
+
+          tag = os.environ['RELEASE_TAG']
+          number = r'(0|[1-9][0-9]*)'
+          match = re.fullmatch(rf'v{number}\.{number}\.{number}(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?', tag)
+          if not match:
+              raise SystemExit('Use a version tag such as v0.1.0 or v0.2.0-beta.1.')
+          prerelease = match.group(4)
+          if prerelease and any(part.isdigit() and len(part) > 1 and part.startswith('0') for part in prerelease.split('.')):
+              raise SystemExit('Numeric prerelease identifiers cannot have leading zeroes.')
+          version = tag[1:]
+          cargo = tomllib.loads(Path('src-tauri/Cargo.toml').read_text())['package']
+          versions = {
+              'package.json': json.loads(Path('package.json').read_text())['version'],
+              'src-tauri/tauri.conf.json': json.loads(Path('src-tauri/tauri.conf.json').read_text())['version'],
+              'src-tauri/Cargo.toml': cargo['version'],
+              'src-tauri/Cargo.lock': next(package['version'] for package in tomllib.loads(Path('src-tauri/Cargo.lock').read_text())['package'] if package['name'] == cargo['name'] and 'source' not in package),
+          }
+          if any(value != version for value in versions.values()):
+              raise SystemExit(f'Tag {tag} does not match application versions: {versions}')
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\ncommit={commit}\nprerelease={str(bool(prerelease)).lower()}\n')
+          PY
+
+  build:
+    needs: prepare
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+          - os: macos-15
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - os: macos-15
+            target: x86_64-apple-darwin
+            bundles: dmg
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+      RELEASE_BUNDLES: ${{ matrix.bundles }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: release-${{ matrix.target }}
+      - name: Install Linux Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config
+      - run: pnpm install --frozen-lockfile
+      - name: Build application and installers
+        env:
+          # Ad-hoc macOS signing; no Apple account or paid certificate required.
+          APPLE_SIGNING_IDENTITY: '-'
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: pnpm exec tauri build --ci --target "$RELEASE_TARGET" --bundles "$RELEASE_BUNDLES" -- --locked
+      - name: Collect installers
+        run: |
+          node --input-type=module <<'JS'
+          import { readdirSync, mkdirSync, copyFileSync, constants } from 'node:fs';
+          import { join } from 'node:path';
+          const target = process.env.RELEASE_TARGET;
+          const extensions = { deb: '.deb', appimage: '.AppImage', nsis: '.exe', msi: '.msi', dmg: '.dmg' };
+          mkdirSync('release-assets', { recursive: true });
+          for (const bundle of process.env.RELEASE_BUNDLES.split(',')) {
+            const directory = join('src-tauri', 'target', target, 'release', 'bundle', bundle);
+            const files = readdirSync(directory, { withFileTypes: true }).filter(file => file.isFile() && file.name.endsWith(extensions[bundle]));
+            if (!files.length) throw new Error(`Missing ${bundle} installer for ${target}`);
+            for (const file of files) {
+              copyFileSync(join(directory, file.name), join('release-assets', `${target}-${file.name}`), constants.COPYFILE_EXCL);
+            }
+          }
+          JS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.target }}
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    # No release is made public until every platform has built successfully.
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify installers and generate checksums
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          from collections import Counter
+          from pathlib import Path
+          files = sorted(Path('release-assets').iterdir())
+          expected = Counter({'.deb': 1, '.AppImage': 1, '.exe': 1, '.msi': 1, '.dmg': 2})
+          if Counter(file.suffix for file in files if file.is_file() and file.stat().st_size > 0) != expected or len(files) != 6:
+              raise SystemExit('Incomplete or unexpected installer set; release will not be published.')
+          with open('release-assets/SHA256SUMS.txt', 'w') as output:
+              for file in files:
+                  with file.open('rb') as content:
+                      digest = hashlib.file_digest(content, 'sha256').hexdigest()
+                  output.write(f'{digest}  {file.name}\n')
+          PY
+      - name: Upload installers and publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"; then
+            if [[ "$draft" != "true" ]]; then
+              echo "Release $RELEASE_TAG is already published; its assets will not be replaced."
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes \
+              --title "MarkNext $RELEASE_TAG" --prerelease="$PRERELEASE"
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          if [[ "$PRERELEASE" == "true" ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false --verify-tag
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest --verify-tag
+          fi

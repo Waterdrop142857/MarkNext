@@ -55,6 +55,23 @@ pnpm build
 pnpm tauri build
 ```
 
+### GitHub Release 自动发布
+
+[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。普通提交仍由原有质量检查工作流处理。
+
+发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.1.0`：
+
+```bash
+git tag -a v0.1.0 -m "MarkNext v0.1.0"
+git push origin v0.1.0
+```
+
+标签必须与应用版本完全一致。`v0.2.0-beta.1` 等带预发布后缀的标签会创建 Prerelease；稳定版本发布后标记为 Latest。
+
+工作流分别生成 Linux x64 的 `.deb` / `.AppImage`、Windows x64 的 NSIS `.exe` / `.msi`，以及 macOS Apple Silicon / Intel 的 `.dmg`。所有平台成功后才上传完整安装包、生成 `SHA256SUMS.txt` 并公开 Release。构建失败不会发布；上传失败会留下草稿，可用同一标签重跑。已公开的 Release 不会被重跑覆盖。
+
+发布使用内置 `GITHUB_TOKEN` 的 `contents: write` 权限，无需额外 PAT。当前 Windows 安装包未配置代码签名；macOS 使用 ad-hoc 签名，未做 Apple 公证，下载后系统可能要求确认。签名与公证方式可参阅 [Tauri 官方说明](https://v2.tauri.app/distribute/sign/macos/)。
+
 ### 快捷键
 
 默认键位：新建 `Ctrl+N`、打开 `Ctrl+O`、保存 `Ctrl+S`、另存为 `Ctrl+Shift+S`、关闭文件 `Ctrl+W`、退出 `Ctrl+Q`。
