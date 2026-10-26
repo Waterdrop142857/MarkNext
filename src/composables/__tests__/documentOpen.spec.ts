@@ -52,8 +52,8 @@ function harness() {
   const read = deferred<string>();
   const reading = deferred<void>();
   native.invoke.mockImplementation((command: string) => {
-    if (command === "read_file") { reading.resolve(); return read.promise.then(content => ({ content, encoding: "utf-8", bom: false })); }
-    return Promise.resolve();
+    if (command === "read_file") { reading.resolve(); return read.promise.then(content => ({ content, encoding: "utf-8", bom: false, version: "new-version" })); }
+    return Promise.resolve("saved-version");
   });
   const edit = (text: string) => { editor.editor.scrollPage!.firstContentInDescendant()!.text = text; };
   return { editor, workspace, actions, read, reading, edit, closeWindow };
@@ -99,7 +99,7 @@ describe("opening a document with real pending Muya changes", () => {
     const writes = native.invoke.mock.calls.filter(([command]) => command === "write_file");
     expect(writes).toHaveLength(choice === "保存" ? 1 : 0);
     if (choice === "保存") {
-      expect(writes[0]![1]).toEqual({ path: "/old.md", content: editor.getMarkdown(), encoding: "utf-8", bom: false });
+      expect(writes[0]![1]).toEqual({ path: "/old.md", content: editor.getMarkdown(), encoding: "utf-8", bom: false, expectedVersion: "missing" });
     }
   });
 

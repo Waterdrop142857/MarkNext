@@ -217,6 +217,8 @@ defineExpose({
   replaceAll,
   getCursorOffset,
   setCursorOffset,
+  getScrollTop: () => cm?.getScrollInfo().top ?? 0,
+  setScrollTop: (top: number) => cm?.scrollTo(null, top),
   clearUndoably,
 });
 </script>

@@ -31,6 +31,7 @@ export const appMenus: MenuDefinition[] = [
       { id: "open", label: "command.open" },
       { id: "save", label: "command.save" },
       { id: "saveAs", label: "command.saveAs" },
+      { id: "recovery", label: "recovery.title" },
       { id: "close", label: "command.close" },
       { id: "exit", label: "command.exit" },
     ],

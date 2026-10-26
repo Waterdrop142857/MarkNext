@@ -356,6 +356,30 @@
   overflow: hidden;
 }
 
+.document-notices {
+  flex-shrink: 0;
+  max-height: min(160px, calc(var(--app-viewport-height, 100vh) / 4));
+  background: var(--app-menubar-bg);
+}
+.document-notice {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--app-menubar-fg);
+  background: var(--app-menubar-bg);
+  border-bottom: 1px solid var(--app-menubar-border);
+  font-size: 13px;
+  line-height: var(--app-ui-control-line-height);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.document-notice > span { flex: 1; min-width: min(220px, 100%); }
+.document-notice button { padding-inline: 10px; border: 1px solid var(--fluent-menu-border); border-radius: 4px; color: inherit; background: var(--fluent-menu-bg); cursor: pointer; }
+.document-notice button:hover { background: var(--fluent-menu-item-hover); }
+
 .editor-area .muya-editor {
   width: 100%;
   max-width: calc(860px + var(--app-ui-scrollbar-space));

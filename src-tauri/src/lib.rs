@@ -1,10 +1,15 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use sha2::{Digest, Sha256};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
+
+mod recovery;
+static DOCUMENT_IO_LOCK: Mutex<()> = Mutex::new(());
 
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -25,9 +30,93 @@ struct ReadDocument {
     content: String,
     encoding: FileEncoding,
     bom: bool,
+    version: String,
+    stamp: String,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct FileError {
+    code: &'static str,
+    message: String,
+    version: Option<String>,
+}
+
+impl From<io::Error> for FileError {
+    fn from(error: io::Error) -> Self {
+        Self {
+            code: "io",
+            message: error.to_string(),
+            version: None,
+        }
+    }
+}
+
+fn content_version(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+
+fn disk_version(path: &Path) -> io::Result<String> {
+    match fs::read(path) {
+        Ok(bytes) => Ok(content_version(&bytes)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok("missing".to_owned()),
+        Err(error) => Err(error),
+    }
+}
+
+fn disk_stamp(path: &Path) -> io::Result<String> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok("missing".into()),
+        Err(error) => return Err(error),
+    };
+    if !metadata.is_file() {
+        return Err(io::Error::other("target is not a file"));
+    }
+    let stamp = format!(
+        "{:?}|{}|{:?}|{:?}",
+        fs::canonicalize(path)?,
+        metadata.len(),
+        metadata.modified()?,
+        metadata.created().ok()
+    );
+    #[cfg(unix)]
+    let stamp = {
+        use std::os::unix::fs::MetadataExt;
+        format!(
+            "{stamp}|{}|{}|{}|{}",
+            metadata.dev(),
+            metadata.ino(),
+            metadata.ctime(),
+            metadata.ctime_nsec()
+        )
+    };
+    Ok(stamp)
+}
+
+#[tauri::command]
+async fn file_status(path: String) -> Result<String, FileError> {
+    tauri::async_runtime::spawn_blocking(move || disk_stamp(Path::new(&path)))
+        .await
+        .map_err(|error| io::Error::other(error.to_string()))?
+        .map_err(Into::into)
+}
+
+#[tauri::command]
+async fn file_version(path: String) -> Result<String, FileError> {
+    tauri::async_runtime::spawn_blocking(move || file_version_sync(path))
+        .await
+        .map_err(|error| io::Error::other(error.to_string()))?
+}
+
+fn file_version_sync(path: String) -> Result<String, FileError> {
+    let _lock = DOCUMENT_IO_LOCK
+        .lock()
+        .map_err(|_| io::Error::other("document lock poisoned"))?;
+    disk_version(Path::new(&path)).map_err(Into::into)
 }
 
 fn decode_document(bytes: &[u8], fallback: FileEncoding) -> io::Result<ReadDocument> {
+    let version = content_version(bytes);
     if bytes.starts_with(&[0xff, 0xfe, 0, 0]) || bytes.starts_with(&[0, 0, 0xfe, 0xff]) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -82,6 +171,8 @@ fn decode_document(bytes: &[u8], fallback: FileEncoding) -> io::Result<ReadDocum
         content,
         encoding,
         bom,
+        version,
+        stamp: String::new(),
     })
 }
 
@@ -115,10 +206,35 @@ fn encode_document(content: &str, encoding: FileEncoding, bom: bool) -> Vec<u8> 
 }
 
 #[tauri::command]
-fn read_file(path: String, default_encoding: Option<FileEncoding>) -> Result<ReadDocument, String> {
-    let bytes = fs::read(&path).map_err(|error| error.to_string())?;
-    decode_document(&bytes, default_encoding.unwrap_or(FileEncoding::Utf8))
-        .map_err(|error| error.to_string())
+async fn read_file(
+    path: String,
+    default_encoding: Option<FileEncoding>,
+) -> Result<ReadDocument, String> {
+    tauri::async_runtime::spawn_blocking(move || read_file_sync(path, default_encoding))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+fn read_file_sync(
+    path: String,
+    default_encoding: Option<FileEncoding>,
+) -> Result<ReadDocument, String> {
+    let _lock = DOCUMENT_IO_LOCK
+        .lock()
+        .map_err(|_| "document lock poisoned".to_owned())?;
+    for _ in 0..3 {
+        let before = disk_stamp(Path::new(&path)).map_err(|error| error.to_string())?;
+        let bytes = fs::read(&path).map_err(|error| error.to_string())?;
+        let after = disk_stamp(Path::new(&path)).map_err(|error| error.to_string())?;
+        if before != after {
+            continue;
+        }
+        let mut document = decode_document(&bytes, default_encoding.unwrap_or(FileEncoding::Utf8))
+            .map_err(|error| error.to_string())?;
+        document.stamp = after;
+        return Ok(document);
+    }
+    Err("The file kept changing while being read".into())
 }
 
 fn image_file_path(path: &Path) -> io::Result<std::path::PathBuf> {
@@ -155,29 +271,74 @@ fn allow_image_file(app: tauri::AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn write_file(
+async fn write_file(
     path: String,
     content: String,
     encoding: Option<FileEncoding>,
     bom: Option<bool>,
-) -> Result<(), String> {
+    expected_version: String,
+) -> Result<String, FileError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        write_file_sync(path, content, encoding, bom, expected_version)
+    })
+    .await
+    .map_err(|error| io::Error::other(error.to_string()))?
+}
+
+fn write_file_sync(
+    path: String,
+    content: String,
+    encoding: Option<FileEncoding>,
+    bom: Option<bool>,
+    expected_version: String,
+) -> Result<String, FileError> {
+    let _lock = DOCUMENT_IO_LOCK
+        .lock()
+        .map_err(|_| io::Error::other("document lock poisoned"))?;
     let encoding = encoding.unwrap_or(FileEncoding::Utf8);
     let bytes = encode_document(
         &content,
         encoding,
         bom.unwrap_or(encoding != FileEncoding::Utf8),
     );
-    atomic_write(Path::new(&path), &bytes).map_err(|error| error.to_string())
+    let path = Path::new(&path);
+    let target = resolved_write_path(path)?;
+    let check = || {
+        let version = disk_version(path)?;
+        if version != expected_version || resolved_write_path(path)? != target {
+            return Err(FileError {
+                code: "conflict",
+                message: "The file changed outside MarkNext".to_owned(),
+                version: Some(version),
+            });
+        }
+        Ok(())
+    };
+    checked_atomic_write(path, &bytes, check)?;
+    Ok(content_version(&bytes))
+}
+
+fn resolved_write_path(path: &Path) -> io::Result<std::path::PathBuf> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => fs::canonicalize(path),
+        Ok(_) => Ok(path.to_path_buf()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(path.to_path_buf()),
+        Err(error) => Err(error),
+    }
 }
 
 fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
+    checked_atomic_write(path, content, || Ok(())).map_err(|error| io::Error::other(error.message))
+}
+
+fn checked_atomic_write(
+    path: &Path,
+    content: &[u8],
+    mut check: impl FnMut() -> Result<(), FileError>,
+) -> Result<(), FileError> {
+    check()?;
     // Keep an existing symlink intact and replace the file it points to.
-    let resolved_path = match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => fs::canonicalize(path)?,
-        Ok(_) => path.to_path_buf(),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => path.to_path_buf(),
-        Err(error) => return Err(error),
-    };
+    let resolved_path = resolved_write_path(path)?;
     let path = resolved_path.as_path();
     let parent = path
         .parent()
@@ -193,18 +354,16 @@ fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
                 return Err(io::Error::new(
                     io::ErrorKind::PermissionDenied,
                     "target file is read-only",
-                ));
+                )
+                .into());
             }
             Some(permissions)
         }
         Ok(_) => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "target is not a file",
-            ))
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "target is not a file").into())
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error),
+        Err(error) => return Err(error.into()),
     };
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -231,7 +390,7 @@ fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
                 break;
             }
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
+            Err(error) => return Err(error.into()),
         }
     }
     let (temp_path, mut temp_file) = temporary.ok_or_else(|| {
@@ -248,6 +407,9 @@ fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
         }
         temp_file.sync_all()?;
         drop(temp_file);
+        // Recheck after writing/syncing the temporary file, immediately before
+        // replacement. External writers are not locked by this application.
+        check()?;
         fs::rename(&temp_path, path)?;
         #[cfg(unix)]
         fs::File::open(parent)?.sync_all()?;
@@ -284,6 +446,11 @@ pub fn run() {
             read_file,
             allow_image_file,
             write_file,
+            file_version,
+            file_status,
+            recovery::recovery_list,
+            recovery::recovery_write,
+            recovery::recovery_remove,
             open_devtools
         ])
         .run(tauri::generate_context!())
@@ -384,16 +551,24 @@ mod tests {
         ] {
             let file = directory.join(format!("{encoding:?}.md"));
             let path = file.to_str().unwrap().to_owned();
-            super::write_file(path.clone(), "中文 📝".to_owned(), Some(encoding), None).unwrap();
+            super::write_file_sync(
+                path.clone(),
+                "中文 📝".to_owned(),
+                Some(encoding),
+                None,
+                "missing".into(),
+            )
+            .unwrap();
             let expected = encode_document("中文 📝", encoding, encoding != FileEncoding::Utf8);
             assert_eq!(fs::read(&file).unwrap(), expected);
-            let document = super::read_file(path.clone(), None).unwrap();
+            let document = super::read_file_sync(path.clone(), None).unwrap();
             assert_eq!(document.content, "中文 📝");
-            super::write_file(
+            super::write_file_sync(
                 path,
                 document.content,
                 Some(document.encoding),
                 Some(document.bom),
+                document.version,
             )
             .unwrap();
             assert_eq!(fs::read(&file).unwrap(), expected);
@@ -450,5 +625,65 @@ mod tests {
 
         fs::set_permissions(&file, original_permissions).unwrap();
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn guarded_saves_reject_changed_deleted_and_newly_created_targets() {
+        let dir = std::env::temp_dir().join(format!("marknext-conflict-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.md");
+        let path = file.to_string_lossy().to_string();
+        fs::write(&file, "base").unwrap();
+        let baseline = super::file_version_sync(path.clone()).unwrap();
+        fs::write(&file, "external").unwrap();
+        let error =
+            super::write_file_sync(path.clone(), "mine".into(), None, None, baseline.clone())
+                .unwrap_err();
+        assert_eq!(error.code, "conflict");
+        assert_eq!(fs::read_to_string(&file).unwrap(), "external");
+        assert!(
+            super::write_file_sync(path.clone(), "mine".into(), None, None, "missing".into())
+                .is_err()
+        );
+        fs::remove_file(&file).unwrap();
+        assert_eq!(
+            super::write_file_sync(path.clone(), "mine".into(), None, None, baseline)
+                .unwrap_err()
+                .version
+                .as_deref(),
+            Some("missing")
+        );
+        let version =
+            super::write_file_sync(path.clone(), "mine".into(), None, None, "missing".into())
+                .unwrap();
+        assert_eq!(version, super::file_version_sync(path).unwrap());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn save_rechecks_after_temporary_write_and_cleans_up_on_conflict() {
+        let dir =
+            std::env::temp_dir().join(format!("marknext-late-conflict-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("note.md");
+        fs::write(&file, "base").unwrap();
+        let mut checks = 0;
+        let error = super::checked_atomic_write(&file, b"mine", || {
+            checks += 1;
+            if checks == 2 {
+                fs::write(&file, "late external edit")?;
+                return Err(super::FileError {
+                    code: "conflict",
+                    message: "changed".into(),
+                    version: None,
+                });
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert_eq!(error.code, "conflict");
+        assert_eq!(fs::read_to_string(file).unwrap(), "late external edit");
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

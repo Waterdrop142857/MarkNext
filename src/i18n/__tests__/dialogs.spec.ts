@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { i18n, t } from "..";
-import { askUnsavedChanges, showError } from "../../services/dialogs";
+import { askUnsavedChanges, askExternalChange, showError } from "../../services/dialogs";
 
 const native = vi.hoisted(() => ({ message: vi.fn() }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ message: native.message }));
@@ -8,6 +8,15 @@ afterEach(() => { native.message.mockReset(); vi.restoreAllMocks(); });
 
 describe("localized native dialogs", () => {
   for (const locale of ["en", "zh-CN"] as const) {
+    it.each([false, true])(`${locale}: external changes offer reload or keep with an unsaved warning when needed (dirty: %s)`, async dirty => {
+      i18n.setLocale(locale);
+      native.message.mockResolvedValueOnce(t("safety.keepEditor")).mockResolvedValueOnce(t("safety.reload"));
+      expect(await askExternalChange(dirty)).toBe("keep");
+      expect(await askExternalChange(dirty)).toBe("reload");
+      expect(native.message).toHaveBeenCalledWith(t(dirty ? "safety.externalDirtyPrompt" : "safety.externalPrompt"), expect.objectContaining({
+        buttons: { ok: t("safety.reload"), cancel: t("safety.keepEditor") },
+      }));
+    });
     it.each(["save", "discard", "cancel"] as const)(`${locale}: maps a displayed %s label to a stable choice`, async choice => {
       i18n.setLocale(locale);
       const labels = { save: t("command.save"), discard: t("dialog.discard"), cancel: t("common.cancel") };
@@ -18,6 +27,15 @@ describe("localized native dialogs", () => {
       }));
     });
   }
+  it.each([["Ok", "reload"], ["Cancel", "keep"], ["", "keep"], ["unexpected", "keep"]])("handles external change response %s conservatively", async (result, expected) => {
+    native.message.mockResolvedValue(result); expect(await askExternalChange(false)).toBe(expected);
+  });
+  it("interprets the displayed external-change labels after a language switch", async () => {
+    i18n.setLocale("en"); let answer!: (choice: string) => void;
+    native.message.mockImplementation(() => new Promise<string>(resolve => { answer = resolve; }));
+    const pending = askExternalChange(true); i18n.setLocale("zh-CN"); answer("Reload from Disk");
+    expect(await pending).toBe("reload");
+  });
   it.each([["Yes", "save"], ["No", "discard"], ["Cancel", "cancel"], ["unexpected", "cancel"]])("handles native %s conservatively", async (result, expected) => {
     i18n.setLocale("en"); native.message.mockResolvedValue(result); expect(await askUnsavedChanges()).toBe(expected);
   });

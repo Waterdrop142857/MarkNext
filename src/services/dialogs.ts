@@ -16,7 +16,7 @@ export async function askUnsavedChanges(): Promise<UnsavedChangesChoice> {
 }
 
 export async function showError(action: string, error: unknown): Promise<void> {
-  const details = error instanceof Error ? error.message : String(error);
+  const details = error instanceof Error ? error.message : error && typeof error === "object" && "message" in error ? String(error.message) : String(error);
   console.error(`${action}:`, error);
   try {
     await message(t("error.details", { action, details }), {
@@ -26,4 +26,24 @@ export async function showError(action: string, error: unknown): Promise<void> {
   catch (dialogError) {
     console.error("Could not show error dialog:", dialogError);
   }
+}
+
+export async function askOverwrite(): Promise<boolean> {
+  const buttons = { ok: t("safety.overwrite"), cancel: t("common.cancel") };
+  const result = await message(t("safety.overwritePrompt"), { title: "MarkNext", kind: "warning", buttons });
+  return result === buttons.ok || result === "Ok";
+}
+
+export async function askExternalChange(dirty: boolean): Promise<"reload" | "keep"> {
+  const buttons = { ok: t("safety.reload"), cancel: t("safety.keepEditor") };
+  const result = await message(t(dirty ? "safety.externalDirtyPrompt" : "safety.externalPrompt"), {
+    title: "MarkNext", kind: "warning", buttons,
+  });
+  return result === buttons.ok || result === "Ok" ? "reload" : "keep";
+}
+
+export async function askDiscardRecovery(): Promise<boolean> {
+  const buttons = { ok: t("recovery.discard"), cancel: t("common.cancel") };
+  const result = await message(t("recovery.discardPrompt"), { title: "MarkNext", kind: "warning", buttons });
+  return result === buttons.ok || result === "Ok";
 }

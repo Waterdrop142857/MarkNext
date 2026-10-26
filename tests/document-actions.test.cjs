@@ -20,6 +20,7 @@ function loadModule(file, dependencies) {
     require(name) {
       if (name === '../i18n') return translations;
       if (name === '../config/preferences') return preferenceConfig;
+      if (name === '../services/documentSafety') return documentSafety;
       assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
       return dependencies[name];
     },
@@ -30,6 +31,7 @@ function loadModule(file, dependencies) {
 const catalogEn = loadModule('src/i18n/en.ts', {});
 const catalogZh = loadModule('src/i18n/zh-CN.ts', {});
 const preferenceConfig = loadModule('src/config/preferences.ts', {});
+const documentSafety = loadModule('src/services/documentSafety.ts', {});
 const translations = loadModule('src/i18n/index.ts', { vue, './en': catalogEn, './zh-CN': catalogZh, '../config/preferences': preferenceConfig });
 translations.i18n.setLocale('zh-CN');
 
@@ -63,11 +65,13 @@ function harness(choices = ['不保存'], options = {}) {
     '@tauri-apps/plugin-dialog': dialog,
     '@tauri-apps/api/core': {
       async invoke(command, args) {
-        if (command === 'read_file') return { content: disk.get(args.path), encoding: 'utf-8', bom: false };
+        if (command === 'read_file') return { content: disk.get(args.path), encoding: 'utf-8', bom: false, version: disk.get(args.path) };
+        if (command === 'file_version') return disk.get(args.path) ?? 'missing';
         assert.equal(command, 'write_file');
         if (options.failSave) throw new Error('simulated write failure');
         disk.set(args.path, args.content);
         options.afterWrite?.(workspace);
+        return args.content;
       },
     },
   });

@@ -8,6 +8,7 @@ import MenuBar from "./components/MenuBar.vue";
 import StatusBar from "./components/StatusBar.vue";
 import FluentContextMenu from "./components/FluentContextMenu.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
+import RecoveryDialog from "./components/RecoveryDialog.vue";
 import { fontStack, type Preferences, type SettingsCategory } from "./config/preferences";
 import { cloneBindings, type ShortcutBindings } from "./config/shortcuts";
 import { usePreferences } from "./composables/usePreferences";
@@ -15,12 +16,14 @@ import type { FluentMenuItem } from "./components/fluentMenu";
 import type { Muya, IMuyaOptions } from "./muya";
 import { useWorkspace } from "./composables/useWorkspace";
 import { useDocumentActions } from "./composables/useDocumentActions";
+import { useRecovery } from "./composables/useRecovery";
+import type { RecoverySnapshot, RecoveryView } from "./services/documentSafety";
 import { useWindowChrome } from "./composables/useWindowChrome";
 import { useTheme } from "./composables/useTheme";
 import { useShortcuts } from "./composables/useShortcuts";
 import { createShortcutHandler } from "./services/shortcutHandler";
 import { readClipboardData } from "./services/clipboard";
-import { showError } from "./services/dialogs";
+import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
 import type { IHistorySelection } from "./muya/selection/types";
@@ -51,6 +54,9 @@ const {
 const { themeMode, setThemeMode } = useTheme();
 const { bindings: shortcutBindings, defaults: defaultBindings, label: commandShortcut } = useShortcuts();
 const settingsOpen = ref(false);
+const recoveryOpen = ref(false);
+const recoveryBusy = ref(false);
+const { externalChange, recoveredCopy } = workspace;
 const settingsCategory = ref<SettingsCategory>("appearance");
 const editorAppearance = computed<Partial<IMuyaOptions>>(previous => {
   const next = {
@@ -104,8 +110,95 @@ function flushEditor() {
 
 const documentActions = useDocumentActions(workspace, {
   flushEditor,
-  closeWindow: destroyWindow,
+  closeWindow: async () => {
+    try {
+      if (!(await recovery.prepareExit())) throw new Error(t("recovery.cleanupError"));
+      await destroyWindow();
+    }
+    catch (error) { recovery.resume(); await recovery.flush(); throw error; }
+  },
 });
+
+const recovery = useRecovery(workspace, {
+  flushEditor,
+  getView: captureView,
+});
+
+function captureView(): RecoveryView {
+  return isSourceMode.value
+    ? { scrollTop: sourceEditorRef.value?.getScrollTop() ?? 0, sourceCursor: sourceEditorRef.value?.getCursorOffset() ?? undefined }
+    : { scrollTop: muyaEditor.value?.domNode.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
+}
+
+function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
+  // View metadata is best-effort. Invalid/stale cursor paths must never prevent
+  // recovering the document's text or reloading a changed disk file.
+  try {
+    if (sourceMode) {
+      sourceEditorRef.value?.setCursorOffset(view?.sourceCursor ?? null);
+      sourceEditorRef.value?.setScrollTop(view?.scrollTop ?? 0);
+    }
+    else if (muyaEditor.value) {
+      const selection = view?.muyaSelection;
+      if (selection) muyaEditor.value.setCursor({ anchor: selection.anchor, anchorPath: selection.anchor.path, focus: selection.focus, focusPath: selection.focus.path });
+      muyaEditor.value.domNode.scrollTop = view?.scrollTop ?? 0;
+    }
+  }
+  catch { /* Content has already been restored; use the editor's default view. */ }
+}
+
+async function reloadDocument(reviewExternal = false) {
+  const sourceMode = isSourceMode.value;
+  const view = captureView();
+  const generation = documentGeneration.value;
+  const done = reviewExternal ? await documentActions.reviewExternalChange() : await documentActions.run("reload");
+  if (!done || documentGeneration.value !== generation + 1) return;
+  if (sourceMode) { sourceInitialized.value = true; isSourceMode.value = true; }
+  await nextTick();
+  if (documentGeneration.value === generation + 1) applyView(view, sourceMode);
+}
+
+async function restoreDocument(record: RecoverySnapshot) {
+  if (recoveryBusy.value) return;
+  recoveryBusy.value = true;
+  try {
+    if (!(await documentActions.restore(record))) return;
+    if (record.sourceMode) sourceInitialized.value = true;
+    await nextTick();
+    applyView(record.view, record.sourceMode);
+    // Persist the new session before retiring the recovered record. A failed
+    // backup keeps the original recovery record available on the next launch.
+    if (await recovery.flush()) await recovery.remove(record.id);
+    recoveryOpen.value = false;
+    await nextTick();
+    if (record.sourceMode) sourceEditorRef.value?.focus(); else muyaEditor.value?.focus();
+  }
+  finally { recoveryBusy.value = false; }
+}
+
+async function discardRecovery(record: RecoverySnapshot) {
+  if (recoveryBusy.value) return;
+  recoveryBusy.value = true;
+  try { if (await askDiscardRecovery()) await recovery.remove(record.id); }
+  finally { recoveryBusy.value = false; }
+}
+
+let safetyTimer: ReturnType<typeof setInterval> | undefined;
+let checkingDisk = false;
+async function checkDisk() {
+  if (checkingDisk || document.hidden || documentActions.isPending()) return;
+  checkingDisk = true;
+  try {
+    flushEditor();
+    const changed = await workspace.checkExternalChange();
+    if (changed && !settingsOpen.value && !recoveryOpen.value) await reloadDocument(true);
+  }
+  finally { checkingDisk = false; }
+}
+function handleVisibility() {
+  if (document.hidden) void recovery.flush();
+  else void checkDisk();
+}
 
 function captureMuyaSelection(): IHistorySelection | null {
   const selection = muyaEditor.value?.getSelection();
@@ -210,11 +303,18 @@ function runMenuCommand(itemId: string) {
     case "saveAs":
     case "close":
     case "exit":
+    case "overwrite":
       void documentActions.run(itemId).then((done) => {
         if (done && ["new", "open"].includes(itemId)) {
           void nextTick(() => muyaEditor.value?.focus());
         }
       });
+      break;
+    case "reload":
+      void reloadDocument();
+      break;
+    case "recovery":
+      recoveryOpen.value = true;
       break;
     case "settings":
     case "shortcuts":
@@ -507,7 +607,7 @@ function runContextCommand(itemId: string) {
 const handleGlobalKeydown = createShortcutHandler({
   bindings: () => shortcutBindings.value,
   defaults: defaultBindings,
-  blocked: () => settingsOpen.value,
+  blocked: () => settingsOpen.value || recoveryOpen.value,
   execute: runMenuCommand,
 });
 
@@ -515,11 +615,22 @@ onMounted(() => {
   window.addEventListener("resize", updateViewportSize);
   window.addEventListener("keydown", handleGlobalKeydown, true);
   void initWindowState(() => documentActions.run("exit"));
+  void recovery.start();
+  window.addEventListener("focus", checkDisk);
+  window.addEventListener("blur", recovery.flush);
+  document.addEventListener("visibilitychange", handleVisibility);
+  safetyTimer = setInterval(() => { void checkDisk(); }, 5000);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateViewportSize);
   window.removeEventListener("keydown", handleGlobalKeydown, true);
+  window.removeEventListener("focus", checkDisk);
+  window.removeEventListener("blur", recovery.flush);
+  document.removeEventListener("visibilitychange", handleVisibility);
+  clearInterval(safetyTimer);
+  void recovery.flush();
+  recovery.stop();
 });
 </script>
 
@@ -555,6 +666,26 @@ onBeforeUnmount(() => {
     />
 
     <div v-if="openMenuId" class="menu-overlay" @click="openMenuId = null" />
+
+    <div v-if="externalChange || recoveredCopy || recovery.failed.value || recovery.records.value.length || recovery.unreadable.value" class="document-notices ui-scroll-region">
+      <div v-if="externalChange" class="document-notice ui-controls" role="status">
+        <span>{{ t(`safety.${externalChange.kind}`) }}</span>
+        <button v-if="externalChange.kind === 'changed'" type="button" @click="runMenuCommand('reload')">{{ t('safety.reload') }}</button>
+        <button type="button" @click="runMenuCommand('saveAs')">{{ t('command.saveAs') }}</button>
+        <button v-if="externalChange.version" type="button" @click="runMenuCommand('overwrite')">{{ t('safety.overwrite') }}</button>
+      </div>
+      <div v-if="recoveredCopy" class="document-notice ui-controls" role="status">
+        <span>{{ t('recovery.copyNotice') }}</span>
+      </div>
+      <div v-if="recovery.failed.value" class="document-notice ui-controls" role="alert">
+        <span>{{ t('recovery.storageError') }}</span>
+        <button type="button" @click="recovery.start().then(() => recovery.flush())">{{ t('recovery.retry') }}</button>
+      </div>
+      <div v-if="recovery.records.value.length || recovery.unreadable.value" class="document-notice ui-controls" role="status">
+        <span>{{ t('recovery.available', { count: recovery.records.value.length }) }}</span>
+        <button type="button" @click="recoveryOpen = true">{{ t('recovery.review') }}</button>
+      </div>
+    </div>
 
     <div v-if="searchOpen" class="search-panel ui-controls" @keydown.esc="closeSearch">
       <div class="search-row">
@@ -637,6 +768,15 @@ onBeforeUnmount(() => {
       :defaults="defaultBindings"
       :save="applySettings"
       @close="settingsOpen = false"
+    />
+    <RecoveryDialog
+      v-if="recoveryOpen"
+      :records="recovery.records.value"
+      :unreadable="recovery.unreadable.value"
+      :busy="recoveryBusy"
+      @restore="restoreDocument"
+      @discard="discardRecovery"
+      @close="recoveryOpen = false"
     />
   </div>
 </template>
