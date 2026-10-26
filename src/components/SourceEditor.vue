@@ -37,7 +37,7 @@ onMounted(() => {
     lineNumbers: true,
     lineWrapping: true,
     theme: "default",
-    viewportMargin: Infinity,
+    viewportMargin: 10,
     readOnly: !props.active,
     screenReaderLabel: t("command.toggleMode"),
   });

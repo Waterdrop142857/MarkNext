@@ -148,3 +148,21 @@ test("deleting a recovery record requires confirmation and never changes the ori
   await expect(page.locator(".recovery-body li")).toHaveCount(0);
   expect(await page.evaluate(() => window.nativeFixture.disk["/old.md"])).toBe("original");
 });
+
+test("large source documents render a viewport and remain editable at the end", async ({ page }) => {
+  const text = Array.from({ length: 5000 }, (_, index) => `row-${index} ${"Markdown text for a large document. ".repeat(6)}`).join("\n");
+  await page.evaluate(content => { window.nativeFixture.disk["/old.md"] = content; }, text);
+  const opening = Date.now(); await source(page);
+  const loadMs = Date.now() - opening;
+  const count = await page.locator(".CodeMirror-code > div").count();
+  expect(count).toBeLessThan(200);
+  await page.locator(".CodeMirror").evaluate(node => {
+    const cm = (node as HTMLElement & { CodeMirror: CodeMirror.Editor }).CodeMirror;
+    cm.setCursor(cm.lastLine(), cm.getLine(cm.lastLine()).length);
+    cm.focus(); cm.scrollIntoView(cm.getCursor());
+  });
+  await page.keyboard.insertText(" END");
+  expect(await value(page)).toBe(`${text} END`);
+  await page.keyboard.press("Control+Z"); expect(await value(page)).toBe(text);
+  console.log(JSON.stringify({ largeDocumentBytes: text.length, totalLines: 5000, renderedSourceLines: count, loadAndSwitchMs: loadMs }));
+});
