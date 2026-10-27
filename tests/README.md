@@ -11,7 +11,7 @@ pnpm install --frozen-lockfile
 pnpm exec playwright install chromium webkit
 ```
 
-在受支持的 Linux 系统（CI 使用 Ubuntu 24.04）可以一次安装浏览器及系统依赖：
+在受支持的 Linux 系统（例如 Ubuntu 24.04）可以一次安装浏览器及系统依赖：
 
 ```bash
 pnpm exec playwright install --with-deps chromium webkit
@@ -53,12 +53,9 @@ pnpm exec playwright install --with-deps chromium webkit
 
 ## CI
 
-`.github/workflows/check.yml` 在 push/pull_request 时执行：
+代码质量检查工作流已移除，push/pull_request 不再自动执行上述检查。所有本地测试和 `pnpm check` 命令仍然保留，可按需运行。
 
-1. Ubuntu 24.04 前端任务：冻结依赖、安装 Chromium/WebKit 与系统依赖、运行 `check:frontend`，上传报告。
-2. Ubuntu、Windows、macOS 三个平台的原生任务：安装平台依赖、冻结 pnpm/Cargo 锁文件，运行 `check:native`。
-
-使用只读仓库权限、任务超时和同分支旧任务取消。矩阵采用 fail-fast=false，以便某个平台失败时仍得到其他平台结果；任务内部保持失败立即退出。CI 配置已在本地校验 YAML，远端三平台执行结果要以提交后的 GitHub Actions 为准。
+仓库保留 [Release 工作流](../.github/workflows/release.yml)，仅由版本标签或手动操作触发，负责多平台安装包构建与发布，不运行完整质量检查流程。发布方法见 [README](../README.md#github-release-自动发布)。
 
 ## 报告
 
@@ -84,7 +81,7 @@ pnpm exec playwright install --with-deps chromium webkit
 MARKNEXT_WEBKIT_EXECUTABLE=/tmp/marknext-webkit-run.sh pnpm check
 ```
 
-MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、用例与断言完全相同；缺少运行库依旧失败，不会跳过 WebKit。临时文件可能被系统清理，之后需重新准备兼容环境。默认 CI 不使用这个覆盖。
+MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、用例与断言完全相同；缺少运行库依旧失败，不会跳过 WebKit。临时文件可能被系统清理，之后需重新准备兼容环境。Release 工作流不运行浏览器测试。
 
 ## 覆盖边界
 

@@ -57,7 +57,7 @@ pnpm tauri build
 
 ### GitHub Release 自动发布
 
-[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。普通提交仍由原有质量检查工作流处理。
+[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
 
 发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.1.0`：
 
