@@ -57,7 +57,7 @@ pnpm tauri build
 
 ### GitHub Release 自动发布
 
-[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
+[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。手动输入 `0.1.0` 会自动规范为 `v0.1.0`，但不会自动创建标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
 
 发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.1.0`：
 
@@ -66,7 +66,9 @@ git tag -a v0.1.0 -m "MarkNext v0.1.0"
 git push origin v0.1.0
 ```
 
-标签必须与应用版本完全一致。`v0.2.0-beta.1` 等带预发布后缀的标签会创建 Prerelease；稳定版本发布后标记为 Latest。
+标签必须先创建并推送到远端，且与应用版本完全一致。运行界面选择 `main` 不等于创建版本标签；缺少标签时工作流会在 checkout 前给出明确错误。`v0.2.0-beta.1` 等带预发布后缀的标签会创建 Prerelease；稳定版本发布后标记为 Latest。
+
+构建环境固定为 Node.js 24 LTS，先安装 Node.js 再安装 pnpm，并在构建前检查实际版本。JavaScript Actions 自身也使用 Node.js 24 运行时；修改工作流后，应先推送修复提交再发起新运行，直接重跑旧运行仍会使用旧版工作流。
 
 工作流分别生成 Linux x64 的 `.deb` / `.AppImage`、Windows x64 的 NSIS `.exe` / `.msi`，以及 macOS Apple Silicon / Intel 的 `.dmg`。所有平台成功后才上传完整安装包、生成 `SHA256SUMS.txt` 并公开 Release。构建失败不会发布；上传失败会留下草稿，可用同一标签重跑。已公开的 Release 不会被重跑覆盖。
 
