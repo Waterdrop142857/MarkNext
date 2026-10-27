@@ -55,6 +55,14 @@ pnpm build
 pnpm tauri build
 ```
 
+### 从 main 构建 Artifacts
+
+在 GitHub 仓库的 **Actions → Build main artifacts → Run workflow** 手动启动构建，无需创建版本标签。工作流读取远端 `main` 的最新提交并固定其 SHA，四个平台构建同一份代码。
+
+进入该次运行的 **Artifacts**，即可下载 Linux x64、Windows x64、macOS Apple Silicon / Intel 安装包。Artifacts 名称形如 `main-<提交前12位>-<目标平台>`，保留 14 天；某个平台失败时，其他成功平台的产物仍可下载。该工作流不创建标签或 GitHub Release，也不会随普通提交自动运行。
+
+main 构建与 Release 共用 [安装包构建工作流](./.github/workflows/build-installers.yml)，使用 Node.js 24 LTS、冻结的 pnpm/Cargo 锁文件，以及相同的平台依赖和签名配置。新工作流需先推送到默认分支，才会出现在 Actions 的手动运行入口。
+
 ### GitHub Release 自动发布
 
 [`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。手动输入 `0.1.0` 会自动规范为 `v0.1.0`，但不会自动创建标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。

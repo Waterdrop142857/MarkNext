@@ -1,0 +1,113 @@
+name: Build native installers
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        description: 'Exact source commit to build on every platform'
+        required: true
+        type: string
+      artifact-prefix:
+        description: 'Artifact name prefix'
+        required: true
+        type: string
+      retention-days:
+        description: 'Number of days to retain build artifacts'
+        type: number
+        default: 14
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis,msi
+          - os: macos-15
+            target: aarch64-apple-darwin
+            bundles: dmg
+          - os: macos-15
+            target: x86_64-apple-darwin
+            bundles: dmg
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TARGET: ${{ matrix.target }}
+      RELEASE_BUNDLES: ${{ matrix.bundles }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - name: Set up Node.js 24 LTS before installing pnpm
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.x'
+          check-latest: true
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v5
+        with:
+          cache: true
+      - name: Verify Node.js 24 LTS
+        run: |
+          node --input-type=module <<'JS'
+          if (process.versions.node.split('.')[0] !== '24' || !process.release.lts) {
+            throw new Error(`Expected Node.js 24 LTS, received ${process.version}`);
+          }
+          console.log(`Node.js ${process.version} LTS (${process.release.lts})`);
+          JS
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: installers-${{ matrix.target }}
+      - name: Install Linux Tauri system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf pkg-config
+      - run: pnpm install --frozen-lockfile
+      - name: Build application and installers
+        env:
+          # Ad-hoc macOS signing; no Apple account or paid certificate required.
+          APPLE_SIGNING_IDENTITY: '-'
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: pnpm exec tauri build --ci --target "$RELEASE_TARGET" --bundles "$RELEASE_BUNDLES" -- --locked
+      - name: Collect installers
+        run: |
+          node --input-type=module <<'JS'
+          import { readdirSync, mkdirSync, copyFileSync, constants } from 'node:fs';
+          import { join } from 'node:path';
+          const target = process.env.RELEASE_TARGET;
+          const extensions = { deb: '.deb', appimage: '.AppImage', nsis: '.exe', msi: '.msi', dmg: '.dmg' };
+          mkdirSync('release-assets', { recursive: true });
+          for (const bundle of process.env.RELEASE_BUNDLES.split(',')) {
+            const directory = join('src-tauri', 'target', target, 'release', 'bundle', bundle);
+            const files = readdirSync(directory, { withFileTypes: true }).filter(file => file.isFile() && file.name.endsWith(extensions[bundle]));
+            if (!files.length) throw new Error(`Missing ${bundle} installer for ${target}`);
+            for (const file of files) {
+              copyFileSync(join(directory, file.name), join('release-assets', `${target}-${file.name}`), constants.COPYFILE_EXCL);
+            }
+          }
+          JS
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.artifact-prefix }}-${{ matrix.target }}
+          path: release-assets/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ inputs.retention-days }}

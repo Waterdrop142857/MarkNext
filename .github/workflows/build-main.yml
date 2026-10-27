@@ -1,0 +1,40 @@
+name: Build main artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-main-artifacts
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    name: Select latest main commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      short: ${{ steps.source.outputs.short }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Record source commit
+        id: source
+        shell: bash
+        run: |
+          commit="$(git rev-parse HEAD)"
+          printf 'commit=%s\nshort=%s\n' "$commit" "${commit:0:12}" >> "$GITHUB_OUTPUT"
+          printf 'Building main at commit `%s`. Installers are available in this run’s Artifacts for 14 days.\n' "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    needs: resolve
+    uses: ./.github/workflows/build-installers.yml
+    with:
+      commit: ${{ needs.resolve.outputs.commit }}
+      artifact-prefix: main-${{ needs.resolve.outputs.short }}
+      retention-days: 14
