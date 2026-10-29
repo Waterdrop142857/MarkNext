@@ -129,7 +129,7 @@ class Clipboard {
         rawText?: string,
         rawHtml?: string,
     ): Promise<void> {
-        return pasteSelection(this, event, rawText, rawHtml);
+        return this.muya.trackTask(() => pasteSelection(this, event, rawText, rawHtml));
     }
 
     copyAsMarkdown() {
@@ -155,9 +155,10 @@ class Clipboard {
     // event, so the old flag + execCommand approach pasted nothing. Read the
     // clipboard text ourselves and feed it through the paste pipeline.
     async pasteAsPlainText(): Promise<void> {
-        const text = await this._readClipboardText();
-        if (text)
-            await pastePlainText(this, text);
+        await this.muya.trackTask(async () => {
+            const text = await this._readClipboardText();
+            if (text && !this.muya.destroyed) await pastePlainText(this, text);
+        });
     }
 
     // Insert an image at the cursor from an explicit `src` (a saved file path or
@@ -165,7 +166,7 @@ class Clipboard {
     // Drives the macOS screenshot flow, which can no longer use the removed
     // `document.execCommand('paste')`.
     pasteImage(src: string): Promise<void> {
-        return pasteImageSrc(this, src);
+        return this.muya.trackTask(() => pasteImageSrc(this, src));
     }
 
     private async _readClipboardText(): Promise<string> {

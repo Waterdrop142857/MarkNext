@@ -393,7 +393,7 @@
   max-width: calc(860px + var(--app-ui-scrollbar-space));
 }
 
-.editor-area.source-mode > .muya-editor {
+.editor-area.source-mode .muya-editor {
   visibility: hidden;
   pointer-events: none;
 }

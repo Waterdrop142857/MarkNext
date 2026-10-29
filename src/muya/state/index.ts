@@ -264,6 +264,12 @@ class JSONState {
         this._flushOperationCache();
     }
 
+    dispose() {
+        if (this._rafId !== null) cancelAnimationFrame(this._rafId);
+        this._rafId = null;
+        this._operationCache = [];
+    }
+
     private _flushOperationCache() {
         if (!this._operationCache.length)
             return;

@@ -344,7 +344,7 @@ export class Editor {
             }
         };
 
-        merge(
+        const inputSubscription = merge(
             fromEvent(domNode, 'click'),
             fromEvent(domNode, 'input'),
             fromEvent(domNode, 'keydown'),
@@ -352,6 +352,7 @@ export class Editor {
             fromEvent(domNode, 'compositionend'),
             fromEvent(domNode, 'compositionstart'),
         ).subscribe(eventHandler);
+        this._muya.eventCenter.once('destroy', () => inputSubscription.unsubscribe());
     }
 
     focus() {

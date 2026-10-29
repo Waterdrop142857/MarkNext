@@ -39,12 +39,14 @@ class CodeBlock extends Parent {
             // language-less / unknown-language / indented blocks never load one —
             // seed them here so first render fills the gutter regardless of language.
             requestAnimationFrame(() => {
+                if (muya.destroyed) return;
                 codeBlock.lastContentInDescendant()?.update();
             });
         }
 
         if (lang) {
             requestAnimationFrame(() => {
+                if (muya.destroyed) return;
                 codeBlock.lang = lang;
             });
         }

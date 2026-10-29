@@ -5,14 +5,18 @@ import CodeMirror from "codemirror";
 import "codemirror/lib/codemirror.css";
 import "codemirror/mode/markdown/markdown.js";
 import "codemirror/addon/search/searchcursor";
+import { createSourceHistoryAdapter } from "../editor/sourceHistoryAdapter";
+import type { DocumentRevision, RendererLease, SourceCheckpoint, SourceHistoryAdapter } from "../editor/sessionTypes";
 
-const props = withDefaults(defineProps<{ modelValue?: string; active?: boolean }>(), {
+const props = withDefaults(defineProps<{ modelValue?: string; active?: boolean; identity?: DocumentRevision; lease?: RendererLease; checkpoint?: SourceCheckpoint | null }>(), {
   modelValue: "",
   active: true,
 });
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
+  (e: "ready"): void;
+  (e: "restore-error", error: unknown): void;
 }>();
 
 const containerRef = ref<HTMLElement | null>(null);
@@ -21,6 +25,10 @@ let suppressModelEmission = false;
 const { locale } = useI18n();
 let searchValue = "";
 let searchMarks: CodeMirror.TextMarker[] = [];
+let history: SourceHistoryAdapter | null = null;
+let disposed = false;
+let pendingScroll = props.checkpoint?.scroll ?? null;
+const standalone = { documentId: "standalone", revision: 0 };
 
 function refreshLayout() { cm?.refresh(); }
 
@@ -49,6 +57,24 @@ onMounted(() => {
     updateSearchMarks();
   });
   cm.clearHistory();
+  const lease = props.lease ?? { documentId: (props.identity ?? standalone).documentId, activation: 0 };
+  history = createSourceHistoryAdapter(cm, {
+    lease,
+    identity: () => props.identity ?? standalone,
+    isCurrent: () => !disposed && (props.identity ?? standalone).documentId === lease.documentId
+      && (!props.lease || props.lease.activation === lease.activation),
+    silently(action) { suppressModelEmission = true; try { action(); } finally { suppressModelEmission = false; } },
+    cleanup,
+  });
+  if (props.checkpoint) {
+    try {
+      const result = history.restore(props.checkpoint, props.identity ?? standalone);
+      if (!result.ok) throw new Error(`Cannot restore source history: ${result.reason}`);
+    }
+    catch (error) { history.destroy(); emit("restore-error", error); return; }
+  }
+  emit("ready");
+  void nextTick(() => { if (props.active && !disposed) restoreScroll(); });
 });
 
 watch(
@@ -74,14 +100,29 @@ watch(locale, () => cm?.setOption("screenReaderLabel", t("command.toggleMode")))
 
 watch(() => props.active, async (active) => {
   cm?.setOption("readOnly", !active);
-  if (active) { await nextTick(); cm?.refresh(); }
+  if (active) { await nextTick(); cm?.refresh(); restoreScroll(); }
 });
 
-onBeforeUnmount(() => {
+function restoreScroll() {
+  if (!cm || !pendingScroll || disposed) return;
+  cm.scrollTo(pendingScroll.left, pendingScroll.top);
+  pendingScroll = null;
+}
+
+function cleanup() {
+  disposed = true;
   window.removeEventListener("resize", refreshLayout);
   searchMarks.forEach(mark => mark.clear());
+  searchMarks = [];
+  cm?.getInputField().blur();
+  cm?.setOption("readOnly", "nocursor");
   cm?.getWrapperElement().remove();
   cm = null;
+}
+
+onBeforeUnmount(() => {
+  if (history) history.destroy(); else cleanup();
+  history = null;
 });
 
 function updateSearchMarks(query = searchValue) {
@@ -207,8 +248,9 @@ defineExpose({
     const last = cm.lastLine();
     cm.setSelection(CodeMirror.Pos(cm.firstLine(), 0), CodeMirror.Pos(last, cm.getLine(last).length));
   },
-  undo: () => cm?.undo(),
-  redo: () => cm?.redo(),
+  undo: () => history?.undo(),
+  redo: () => history?.redo(),
+  getHistoryAdapter: () => history,
   pasteText: (text: string) => cm?.replaceSelection(text, "end", "+input"),
   search,
   findNext,

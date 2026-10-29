@@ -74,8 +74,8 @@ class HTMLPreview extends Parent {
                     // Keep this exact element so stale preparations cannot mutate
                     // a subsequent preview. No asset request precedes permission.
                     void prepareImageSrc(imageSrc.src).then(() => {
-                        if (revision === this._revision && imageSrc.src && this.domNode?.contains(img)) img.src = imageSrc.src;
-                    }).catch(() => img.classList.add(CLASS_NAMES.MU_IMAGE_FAIL));
+                        if (!this.muya.destroyed && revision === this._revision && imageSrc.src && this.domNode?.contains(img)) img.src = imageSrc.src;
+                    }).catch(() => { if (!this.muya.destroyed) img.classList.add(CLASS_NAMES.MU_IMAGE_FAIL); });
                 }
                 else if (imageSrc.src) img.setAttribute('src', imageSrc.src);
                 else img.removeAttribute('src');

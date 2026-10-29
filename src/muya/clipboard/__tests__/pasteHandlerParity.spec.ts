@@ -120,6 +120,7 @@ function makeClipboard(
     },
 ) {
     const clipboard = new Clipboard({
+        trackTask: <T>(task: () => Promise<T>) => task(),
         options: { bulletListMarker: '-', frontMatter: true, ...options },
         editor: {},
     } as unknown as Muya);

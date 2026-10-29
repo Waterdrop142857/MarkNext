@@ -412,6 +412,7 @@ class Content extends TreeNode {
             return;
 
         requestAnimationFrame(() => {
+            if (this.muya.destroyed) return;
             if (event.shiftKey && this.selection.anchorBlock !== this)
                 return;
 

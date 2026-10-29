@@ -276,6 +276,17 @@ class History {
         this._lastRecorded = 0;
     }
 
+    // A restored renderer must not merge its first edit with the last edit
+    // captured by a different renderer (or inherit its input-kind boundary).
+    breakGroup() {
+        this.cutoff();
+        this._lastInputKind = null;
+    }
+
+    size() {
+        return { undo: this._stack.undo.length, redo: this._stack.redo.length };
+    }
+
     markInputBoundary(inputType: string, data: Nullable<string>): void {
         const kind = classifyInputKind(inputType);
         if (kind == null)

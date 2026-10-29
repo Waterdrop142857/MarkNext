@@ -498,6 +498,7 @@ class Format extends Content {
             this._emitFootnoteToolEvent(footnoteEl);
 
         requestAnimationFrame(() => {
+            if (this.muya.destroyed) return;
             // TODO: @JOCS, remove use this.selection directly.
             if (event.shiftKey && this.selection.anchorBlock !== this) {
                 // TODO: handle select multiple paragraphs
@@ -1662,6 +1663,7 @@ class Format extends Content {
             if (type === 'image') {
                 // Show image selector when create a inline image by menu/shortcut/or just input `![]()`
                 requestAnimationFrame(() => {
+                    if (this.muya.destroyed) return;
                     const startNode = Selection.getSelectionStart();
 
                     if (isHTMLElement(startNode)) {

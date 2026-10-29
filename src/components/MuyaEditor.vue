@@ -9,6 +9,10 @@ import { LINK_SELECTOR } from "../muya/editor/linkMouseEvents";
 import { getLinkInfo } from "../muya/utils/getLinkInfo";
 import { createDocumentImageResolver } from "../services/documentImages";
 import { BLOCK_DOM_PROPERTY } from "../muya/config";
+import { createMuyaHistoryAdapter } from "../editor/muyaHistoryAdapter";
+import { cloneData, decodeMuyaCheckpoint } from "../editor/checkpointCodec";
+import type { TState } from "../muya/state/types";
+import type { DocumentRevision, MuyaCheckpoint, MuyaHistoryAdapter, RendererLease } from "../editor/sessionTypes";
 import type HTMLPreview from "../muya/block/commonMark/html/htmlPreview";
 import {
   createWebKitSelectionPainter,
@@ -22,6 +26,9 @@ const props = withDefaults(
     active?: boolean;
     options?: Partial<IMuyaOptions>;
     documentPath?: string | null;
+    identity?: DocumentRevision;
+    lease?: RendererLease;
+    checkpoint?: MuyaCheckpoint | null;
   }>(),
   {
     modelValue: "",
@@ -35,6 +42,7 @@ const emit = defineEmits<{
   (e: "update:modelValue", markdown: string): void;
   (e: "ready", editor: Muya): void;
   (e: "selection-change", selection: unknown): void;
+  (e: "restore-error", error: unknown): void;
 }>();
 
 const wrapperRef = ref<HTMLElement | null>(null);
@@ -42,6 +50,10 @@ let editor: Muya | null = null;
 let domNode: HTMLElement | null = null;
 let internalChange = false;
 let webkitPainter: WebKitSelectionPainter | null = null;
+let history: MuyaHistoryAdapter | null = null;
+let restoring = false;
+let disposed = false;
+const standalone = { documentId: "standalone", revision: 0 };
 const { locale } = useI18n();
 const editorLocale = () => locale.value === "zh-CN" ? zhCN : en;
 const images = createDocumentImageResolver(() => props.documentPath);
@@ -82,6 +94,17 @@ function handleDblClick(event: MouseEvent) {
   }
 }
 
+function cleanup() {
+  disposed = true;
+  webkitPainter?.stop();
+  webkitPainter = null;
+  domNode?.removeEventListener("dblclick", handleDblClick);
+  editor?.destroy();
+  editor = null;
+  domNode = null;
+  images.reset();
+}
+
 onMounted(() => {
   if (!wrapperRef.value) return;
 
@@ -101,9 +124,13 @@ onMounted(() => {
   // disagree on first-new-file state).
   const initialMarkdown = props.modelValue;
 
+  let checkpoint: MuyaCheckpoint | null;
+  try { checkpoint = props.checkpoint ? decodeMuyaCheckpoint(props.checkpoint) : null; }
+  catch (error) { cleanup(); emit("restore-error", error); return; }
   editor = new Muya(placeholder, {
-    markdown: initialMarkdown,
     ...props.options,
+    markdown: initialMarkdown,
+    json: checkpoint ? cloneData<TState[]>(checkpoint.state) : undefined,
     locale: editorLocale(),
     resolveImageSrc: images.resolve,
     prepareImageSrc: images.prepare,
@@ -112,7 +139,7 @@ onMounted(() => {
   domNode.addEventListener("dblclick", handleDblClick);
 
   editor.on("json-change", () => {
-    if (!editor || !props.active) return;
+    if (!editor || !props.active || restoring || disposed) return;
     const markdown = editor.getMarkdown();
     if (markdown === props.modelValue) return;
     internalChange = true;
@@ -124,11 +151,29 @@ onMounted(() => {
   });
 
   editor.on("selection-change", (selection: unknown) => {
+    if (!props.active || restoring || disposed) return;
     emit("selection-change", selection);
     webkitPainter?.schedule();
   });
 
   editor.init();
+  const lease = props.lease ?? { documentId: (props.identity ?? standalone).documentId, activation: 0 };
+  history = createMuyaHistoryAdapter(editor, {
+    lease,
+    scrollHost: wrapperRef.value,
+    identity: () => props.identity ?? standalone,
+    isCurrent: () => !disposed && (props.identity ?? standalone).documentId === lease.documentId
+      && (!props.lease || props.lease.activation === lease.activation),
+    silently(action) { restoring = true; try { action(); } finally { restoring = false; } },
+    cleanup,
+  }, checkpoint);
+  if (checkpoint) {
+    try {
+      const result = history.restore(checkpoint, checkpoint);
+      if (!result.ok) throw new Error(`Cannot restore Muya history: ${result.reason}`);
+    }
+    catch (error) { history.destroy(); emit("restore-error", error); return; }
+  }
   webkitPainter = createWebKitSelectionPainter(domNode, wrapperRef.value);
   if (props.active) webkitPainter?.start();
   emit("ready", editor);
@@ -176,13 +221,8 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  webkitPainter?.stop();
-  webkitPainter = null;
-  domNode?.removeEventListener("dblclick", handleDblClick);
-  editor?.destroy();
-  editor = null;
-  domNode = null;
-  images.reset();
+  if (history) history.destroy(); else cleanup();
+  history = null;
 });
 
 defineExpose({
@@ -193,6 +233,7 @@ defineExpose({
   undo: () => editor?.undo(),
   redo: () => editor?.redo(),
   editor,
+  getHistoryAdapter: () => history,
 });
 </script>
 

@@ -3,12 +3,14 @@
 > 版本：v0.1 架构草案  
 > 目标：在现有 Demo（Tauri 2 + Vue 3 + Muya + CodeMirror）基础上，规划可扩展的桌面 Markdown 编辑器架构。
 
+> 2026-10-29：文档会话、历史检查点与渲染实例的最新设计见 [文档会话与编辑历史接口设计](docs/editor-session-history.md)。接口、两个历史适配器及单文件 EditorSession 已接入，支持纯数据检查点与渲染器销毁/恢复；多文档仓库和标签页待实现；后文早期多标签页和模式切换规划以该设计为准。
+
 ## 当前实现（2026-10-04）
 
 以下记录当前代码，后文的 Pinia、多标签页等仍属于架构规划：
 
 - `useWorkspace` 的 Vue refs 保存当前文档、已保存内容、路径和 documentGeneration。`useDocumentActions` 统一新建、打开、关闭与退出的保存保护，替换前刷新真实编辑器队列并校验内容版本。
-- 每个文档保留一个 Muya 实例；CodeMirror 在第一次进入源码模式时创建，之后隐藏/激活同一实例。同文档且内容未在 WYSIWYG 改变时保留源码撤销步骤，外部内容变化清空旧 CodeMirror 历史，generation 变化创建新编辑器。源码会话仍作为一个 Muya 撤销边界提交。
+- App 通过 EditorSession 统一调度历史与模式切换。普通编辑中每个文档保留一个 Muya 实例；CodeMirror 在第一次进入源码模式时创建，之后隐藏/激活同一实例。同文档且内容未在 WYSIWYG 改变时保留源码撤销步骤，外部内容变化清空旧 CodeMirror 历史，generation 变化创建新编辑器。源码会话仍作为一个 Muya 撤销边界提交。
 - 搜索命令按当前查询和编辑器执行。空查询清理匹配，替换前核对当前文本；源码单次替换必须对应实际查询匹配，两种模式使用不区分大小写的字面查找并支持回绕。
 - `documentImages` 显式提供当前文件目录与 Tauri URL 转换，Muya 通过 options 接入，不依赖宿主全局 DIRNAME。原生 assetProtocol 初始 scope 为空，`allow_image_file` 只授权具体图片文件，加载前等待授权；另存为刷新资源上下文。
 - 异步图表在各版本独立的隐藏容器内渲染，当前版本才提交；取消/销毁清理 observer、订阅和 Vega view，相同请求复用结果。

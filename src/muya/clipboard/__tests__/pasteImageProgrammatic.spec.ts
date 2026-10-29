@@ -37,6 +37,7 @@ function makeAnchorBlock(initialText = '', cursor = 0) {
 
 function makeClipboard(options: Record<string, unknown>, anchorBlock: Content) {
     const clipboard = new Clipboard({
+        trackTask: <T>(task: () => Promise<T>) => task(),
         options,
         editor: { activeContentBlock: anchorBlock },
     } as unknown as Muya);

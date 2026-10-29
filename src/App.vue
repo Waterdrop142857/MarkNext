@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import MuyaEditor from "./components/MuyaEditor.vue";
-import SourceEditor from "./components/SourceEditor.vue";
+import EditorSession from "./components/EditorSession.vue";
 import TitleBar from "./components/TitleBar.vue";
 import MenuBar from "./components/MenuBar.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -137,13 +136,14 @@ watch([
 const openMenuId = ref<string | null>(null);
 const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[] } | null>(null);
 const muyaEditor = shallowRef<Muya | null>(null);
-const sourceEditorRef = ref<InstanceType<typeof SourceEditor> | null>(null);
-const sourceInitialized = ref(false);
-const sourceBoundarySelection = shallowRef<IHistorySelection | null>(null);
-let sourceBoundaryMarkdown = markdown.value;
+const editorSessionRef = ref<InstanceType<typeof EditorSession> | null>(null);
+const sourceEditorRef = computed(() => editorSessionRef.value?.getSource() ?? null);
+const contentRevision = ref(0);
+watch(markdown, () => { contentRevision.value++; }, { flush: "sync" });
+const editorIdentity = computed(() => ({ documentId: workspace.documentId.value, revision: contentRevision.value }));
 
 function flushEditor() {
-  if (!isSourceMode.value) muyaEditor.value?.flush();
+  editorSessionRef.value?.flush();
 }
 
 const documentActions = useDocumentActions(workspace, {
@@ -191,7 +191,7 @@ async function reloadDocument(reviewExternal = false) {
   const generation = documentGeneration.value;
   const done = reviewExternal ? await documentActions.reviewExternalChange() : await documentActions.run("reload");
   if (!done || documentGeneration.value !== generation + 1) return;
-  if (sourceMode) { sourceInitialized.value = true; isSourceMode.value = true; }
+  if (sourceMode) isSourceMode.value = true;
   await nextTick();
   if (documentGeneration.value === generation + 1) applyView(view, sourceMode);
 }
@@ -201,7 +201,6 @@ async function restoreDocument(record: RecoverySnapshot) {
   recoveryBusy.value = true;
   try {
     if (!(await documentActions.restore(record))) return;
-    if (record.sourceMode) sourceInitialized.value = true;
     await nextTick();
     applyView(record.view, record.sourceMode);
     // Persist the new session before retiring the recovered record. A failed
@@ -254,46 +253,15 @@ function captureMuyaSelection(): IHistorySelection | null {
 watch(documentGeneration, () => {
   activeHeading.value = null;
   muyaEditor.value = null;
-  sourceBoundarySelection.value = null;
-  sourceBoundaryMarkdown = markdown.value;
   isSourceMode.value = false;
-  sourceInitialized.value = false;
 }, { flush: "sync" });
 
 async function toggleEditorMode() {
-  if (!isSourceMode.value) {
-    if (!isUntitled.value && !currentFilePath.value && !markdown.value) {
-      if (!(await documentActions.run("new"))) return;
-      await nextTick();
-    }
-    const muya = muyaEditor.value;
-    muya?.flush();
-    sourceBoundaryMarkdown = markdown.value;
-    sourceBoundarySelection.value = muya ? captureMuyaSelection() : null;
-    sourceInitialized.value = true;
-    isSourceMode.value = true;
+  if (!isSourceMode.value && !isUntitled.value && !currentFilePath.value && !markdown.value) {
+    if (!(await documentActions.run("new"))) return;
     await nextTick();
-    sourceEditorRef.value?.focus();
-    return;
   }
-
-  const muya = muyaEditor.value;
-  try {
-    if (muya && markdown.value !== sourceBoundaryMarkdown) {
-      muya.replaceContent(markdown.value, sourceBoundarySelection.value ?? undefined);
-      muya.flush();
-    }
-  }
-  catch (error) {
-    console.error("Could not commit source-mode changes to Muya:", error);
-    return;
-  }
-
-  sourceBoundarySelection.value = null;
-  sourceBoundaryMarkdown = markdown.value;
-  isSourceMode.value = false;
-  await nextTick();
-  muya?.focus();
+  await editorSessionRef.value?.toggleMode();
 }
 
 const searchOpen = ref(false);
@@ -421,18 +389,8 @@ function runMenuCommand(itemId: string) {
 }
 
 function editorUndo() {
-  try {
-    if (!isSourceMode.value) {
-      muyaEditor.value?.flush();
-      muyaEditor.value?.undo();
-    }
-    else {
-      sourceEditorRef.value?.undo();
-    }
-  }
-  catch (error) {
-    console.error("Native undo failed:", error);
-  }
+  try { editorSessionRef.value?.undo(); }
+  catch (error) { console.error("Native undo failed:", error); }
 }
 
 async function pasteClipboard() {
@@ -454,18 +412,8 @@ async function pasteClipboard() {
 }
 
 function editorRedo() {
-  try {
-    if (!isSourceMode.value) {
-      muyaEditor.value?.flush();
-      muyaEditor.value?.redo();
-    }
-    else {
-      sourceEditorRef.value?.redo();
-    }
-  }
-  catch (error) {
-    console.error("Native redo failed:", error);
-  }
+  try { editorSessionRef.value?.redo(); }
+  catch (error) { console.error("Native redo failed:", error); }
 }
 
 function selectAllDocument() {
@@ -762,27 +710,18 @@ onBeforeUnmount(() => {
           <p>{{ t('document.empty') }}</p>
           <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
         </div>
-        <MuyaEditor
-          :options="editorAppearance"
+        <EditorSession
           v-else
           :key="documentGeneration"
+          ref="editorSessionRef"
+          :options="editorAppearance"
+          :identity="editorIdentity"
           :document-path="currentFilePath"
-          :active="!isSourceMode"
-          :aria-hidden="isSourceMode"
-          :inert="isSourceMode"
           v-model="markdown"
+          v-model:source-mode="isSourceMode"
           @selection-change="selection = $event"
           @ready="muyaEditor = $event"
-        />
-        <SourceEditor
-          :key="documentGeneration"
-          ref="sourceEditorRef"
-          v-if="sourceInitialized"
-          v-show="isSourceMode"
-          :active="isSourceMode"
-          :aria-hidden="!isSourceMode"
-          :inert="!isSourceMode"
-          v-model="markdown"
+          @error="showError(t('error.fileAction'), $event)"
         />
       </main>
     </div>

@@ -97,6 +97,7 @@ async function insertImageSrc(
 
     let finalSrc = src;
     const resolved = await imageAction({ src, alt: '', title: '' });
+    if (clipboard.muya.destroyed) return;
     if (resolved)
         finalSrc = resolved;
 
@@ -160,6 +161,7 @@ export async function tryPasteImage(
     imageFile: Nullable<File>,
 ): Promise<boolean> {
     const src = await resolveImageSrc(clipboard, imageFile);
+    if (clipboard.muya.destroyed) return false;
     if (src == null)
         return false;
 
@@ -258,6 +260,7 @@ function reselectImageAt(clipboard: Clipboard, block: Format, startOffset: numbe
 
     let attempts = 60;
     const positionWhenLoaded = (): void => {
+        if (clipboard.muya.destroyed) return;
         const current = findImageWrapper(block, startOffset);
         if (current?.querySelector('img')) {
             positionImageControls(clipboard, block, current);
@@ -294,6 +297,7 @@ async function replaceImageAt(
 
     let finalSrc = src;
     const resolved = await imageAction({ src, alt: '', title: '' });
+    if (clipboard.muya.destroyed) return;
     if (resolved)
         finalSrc = resolved;
 
@@ -315,6 +319,7 @@ export async function tryReplaceSelectedImage(
         return false;
 
     const src = await resolveImageSrc(clipboard, imageFile);
+    if (clipboard.muya.destroyed) return false;
     if (src == null)
         return false;
 

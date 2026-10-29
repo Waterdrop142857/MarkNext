@@ -146,6 +146,19 @@ export class Muya {
     public i18n: I18n;
 
     private _uiPlugins: Record<string, unknown> = {};
+    private _destroyed = false;
+    get destroyed() { return this._destroyed; }
+    private _pendingTasks = 0;
+    get busy() { return this._pendingTasks > 0; }
+
+    async trackTask<T>(task: () => Promise<T>): Promise<T> {
+        this._pendingTasks++;
+        try { return await task(); }
+        finally {
+            this._pendingTasks--;
+            if (!this._pendingTasks && !this._destroyed) this.eventCenter.emit('async-idle');
+        }
+    }
 
     constructor(element: HTMLElement, options?: Partial<IMuyaOptions>) {
         this.options = Object.assign({}, MUYA_DEFAULT_OPTIONS, options ?? {});
@@ -1672,6 +1685,9 @@ export class Muya {
     }
 
     destroy() {
+        if (this._destroyed) return;
+        this._destroyed = true;
+        this.editor.jsonState.dispose();
         this.eventCenter.emit('destroy');
         this.eventCenter.detachAllDomEvents();
         this.eventCenter.unsubscribeAll();

@@ -171,21 +171,23 @@ function handleWebLinkImage(
     const uriPromise = readItem(uriItem);
     const htmlPromise = readItem(htmlItem);
 
-    void (async () => {
+    void muya.trackTask(async () => {
         const url = firstUri(await uriPromise);
+        if (muya.destroyed) return;
         if (!URL_REG.test(url))
             return;
 
         const html = await htmlPromise;
+        if (muya.destroyed) return;
         const isImage
             = /<img\b/i.test(html)
                 || IMAGE_EXT_REG.test(url)
                 || (await checkImageContentType(url));
-        if (!isImage)
+        if (!isImage || muya.destroyed)
             return;
 
         insertImageParagraph(muya, target, `![](${url})`);
-    })();
+    });
 
     return true;
 }
@@ -204,9 +206,11 @@ async function persistDroppedImage(
 
     try {
         const newSrc = await imageAction({ src: path, alt: name, title: '' });
+        if (muya.destroyed) return;
         const { src } = getImageSrc(path, muya.options.resolveImageSrc);
         if (src) {
             if (muya.options.prepareImageSrc) await muya.options.prepareImageSrc(src);
+            if (muya.destroyed) return;
             muya.editor.inlineRenderer.renderer.urlMap.set(newSrc, src);
         }
 
@@ -261,7 +265,7 @@ function handleFileImage(
     const loadingId = `loading-${getUniqueId()}`;
     insertImageParagraph(muya, target, `![${loadingId}](${path})`);
 
-    void persistDroppedImage(muya, path, name, loadingId);
+    void muya.trackTask(() => persistDroppedImage(muya, path, name, loadingId));
 
     return true;
 }
