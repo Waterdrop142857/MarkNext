@@ -6,6 +6,7 @@ import SourceEditor from "./components/SourceEditor.vue";
 import TitleBar from "./components/TitleBar.vue";
 import MenuBar from "./components/MenuBar.vue";
 import StatusBar from "./components/StatusBar.vue";
+import DocumentOutline from "./components/DocumentOutline.vue";
 import FluentContextMenu from "./components/FluentContextMenu.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import RecoveryDialog from "./components/RecoveryDialog.vue";
@@ -17,6 +18,8 @@ import type { Muya, IMuyaOptions } from "./muya";
 import { useWorkspace } from "./composables/useWorkspace";
 import { useDocumentActions } from "./composables/useDocumentActions";
 import { useRecovery } from "./composables/useRecovery";
+import { useDocumentAnalysis } from "./composables/useDocumentAnalysis";
+import type { OutlineHeading } from "./services/documentAnalysis";
 import type { RecoverySnapshot, RecoveryView } from "./services/documentSafety";
 import { useWindowChrome } from "./composables/useWindowChrome";
 import { useTheme } from "./composables/useTheme";
@@ -40,6 +43,41 @@ const {
   selection,
   dirty,
 } = workspace;
+const { analysis, refresh: refreshAnalysis } = useDocumentAnalysis(markdown, documentGeneration);
+const outlineOpen = ref(false);
+const activeHeading = ref<string | null>(null);
+
+watch(markdown, () => { activeHeading.value = null; });
+watch(outlineOpen, () => { void nextTick(() => window.dispatchEvent(new Event("resize"))); });
+
+function closeOutline() {
+  outlineOpen.value = false;
+  void nextTick(() => document.getElementById("outline-toggle")?.focus());
+}
+
+function navigateOutline(heading: OutlineHeading) {
+  flushEditor();
+  const target = refreshAnalysis().headings.find(item => item.id === heading.id && item.text === heading.text);
+  if (!target) return;
+  if (isSourceMode.value) sourceEditorRef.value?.goToLine(target.line);
+  else {
+    const muya = muyaEditor.value;
+    if (!muya?.editor.scrollPage) return;
+    let index = 0;
+    for (const block of muya.editor.scrollPage.children.iterator()) {
+      if (block.blockName !== "atx-heading" && block.blockName !== "setext-heading") continue;
+      if (index++ !== target.index || !block.isParent()) continue;
+      const content = block.firstContentInDescendant();
+      if (!content) return;
+      muya.focus();
+      const offset = block.blockName === "atx-heading" ? Math.min(target.level + 1, content.text.length) : 0;
+      content.setCursor(offset, offset, true);
+      block.domNode?.scrollIntoView({ block: "center", inline: "nearest" });
+      break;
+    }
+  }
+  activeHeading.value = target.id;
+}
 
 const {
   isMaximized,
@@ -214,6 +252,7 @@ function captureMuyaSelection(): IHistorySelection | null {
 }
 
 watch(documentGeneration, () => {
+  activeHeading.value = null;
   muyaEditor.value = null;
   sourceBoundarySelection.value = null;
   sourceBoundaryMarkdown = markdown.value;
@@ -716,40 +755,46 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <main class="editor-area" :class="{ 'source-mode': isSourceMode }">
-      <div v-if="!isUntitled && !currentFilePath && !markdown" class="empty-state">
-        <p>{{ t('document.empty') }}</p>
-        <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
-      </div>
-      <MuyaEditor
-        :options="editorAppearance"
-        v-else
-        :key="documentGeneration"
-        :document-path="currentFilePath"
-        :active="!isSourceMode"
-        :aria-hidden="isSourceMode"
-        :inert="isSourceMode"
-        v-model="markdown"
-        @selection-change="selection = $event"
-        @ready="muyaEditor = $event"
-      />
-      <SourceEditor
-        :key="documentGeneration"
-        ref="sourceEditorRef"
-        v-if="sourceInitialized"
-        v-show="isSourceMode"
-        :active="isSourceMode"
-        :aria-hidden="!isSourceMode"
-        :inert="!isSourceMode"
-        v-model="markdown"
-      />
-    </main>
+    <div class="workspace-body">
+      <DocumentOutline v-if="outlineOpen" :headings="analysis.headings" :active-id="activeHeading" @navigate="navigateOutline" @close="closeOutline" />
+      <main class="editor-area" :class="{ 'source-mode': isSourceMode }">
+        <div v-if="!isUntitled && !currentFilePath && !markdown" class="empty-state">
+          <p>{{ t('document.empty') }}</p>
+          <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
+        </div>
+        <MuyaEditor
+          :options="editorAppearance"
+          v-else
+          :key="documentGeneration"
+          :document-path="currentFilePath"
+          :active="!isSourceMode"
+          :aria-hidden="isSourceMode"
+          :inert="isSourceMode"
+          v-model="markdown"
+          @selection-change="selection = $event"
+          @ready="muyaEditor = $event"
+        />
+        <SourceEditor
+          :key="documentGeneration"
+          ref="sourceEditorRef"
+          v-if="sourceInitialized"
+          v-show="isSourceMode"
+          :active="isSourceMode"
+          :aria-hidden="!isSourceMode"
+          :inert="!isSourceMode"
+          v-model="markdown"
+        />
+      </main>
+    </div>
 
     <StatusBar
       :is-source-mode="isSourceMode"
       :current-file-path="currentFilePath"
       :is-untitled="isUntitled"
       :selection="selection"
+      :statistics="analysis.statistics"
+      :outline-open="outlineOpen"
+      @toggle-outline="outlineOpen = !outlineOpen"
     />
 
     <FluentContextMenu

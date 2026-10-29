@@ -219,6 +219,13 @@ defineExpose({
   setCursorOffset,
   getScrollTop: () => cm?.getScrollInfo().top ?? 0,
   setScrollTop: (top: number) => cm?.scrollTo(null, top),
+  goToLine: (line: number) => {
+    if (!cm) return;
+    const position = CodeMirror.Pos(Math.max(0, Math.min(line, cm.lastLine())), 0);
+    cm.setCursor(position);
+    cm.scrollIntoView(position, 64);
+    cm.focus();
+  },
   clearUndoably,
 });
 </script>

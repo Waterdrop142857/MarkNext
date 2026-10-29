@@ -345,6 +345,14 @@
   background: var(--fluent-menu-item-hover, #f3f3f3);
 }
 
+.workspace-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .editor-area {
   position: relative;
   flex: 1;
@@ -466,6 +474,7 @@
   min-width: 0;
   overflow: hidden;
   justify-content: space-between;
+  gap: 12px;
   padding: 0 16px;
   height: 30px;
   align-items: center;
@@ -481,6 +490,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.app-footer .status-document { flex: 1; }
+.outline-toggle { --ui-control-height: 24px; --ui-control-font-size: 12px; flex-shrink: 0; gap: 5px; padding-inline: 6px; border: 0; border-radius: var(--app-ui-control-radius); background: transparent; color: inherit; cursor: pointer; }
+.outline-toggle:hover, .outline-toggle[aria-expanded="true"] { background: var(--app-menubar-hover); }
+.outline-toggle:focus-visible { outline: 1px solid var(--app-ui-focus-color); outline-offset: -1px; }
+.document-statistics { display: flex; flex-shrink: 0; gap: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .app-footer .status-selection { display: none; } }
 
 /* Dark theme refinements */
 :root[data-theme="dark"] .empty-state {
