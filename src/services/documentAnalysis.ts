@@ -12,7 +12,8 @@ export function countText(text: string): DocumentStatistics {
   const other = text.replace(/\p{Script=Han}/gu, () => { chinese++; return " "; });
   return {
     words: chinese + (other.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)?.length ?? 0),
-    characters: Array.from(text.replace(/\s/gu, "")).length,
+    // Block separators are not characters; preserve spaces and punctuation.
+    characters: Array.from(text.replace(/[\r\n]/g, "")).length,
   };
 }
 
@@ -34,14 +35,15 @@ export function analyzeDocument(markdown: string): DocumentAnalysis {
   function plain(text: string): string {
     // Ordinary long paragraphs need no second inline-tokenization pass.
     if (!/[*_`[\]<>!~\\&$^]/.test(text)) return text;
-    return tokensToPlainText(tokenizer(text, { hasBeginRules: false, labels }));
+    return tokensToPlainText(tokenizer(text, { hasBeginRules: false, labels }), "\n");
   }
   function blockText(tokens: TLexedToken[]): string {
     return tokens.map(token => {
       switch (token.type) {
-        case "space": case "hr": case "def": case "frontmatter": return "";
+        case "space": return token.raw;
+        case "hr": case "def": case "frontmatter": return "";
         case "list": case "blockquote": case "footnote": return blockText(children(token));
-        case "table": return [token.header, ...token.rows].map(row => row.map(cell => plain(cell.text)).join(" ")).join("\n");
+        case "table": return [token.header, ...token.rows].map(row => row.map(cell => plain(cell.text)).join("\n")).join("\n");
         case "code": case "multiplemath": return token.text;
         default: return "text" in token && typeof token.text === "string" ? plain(token.text) : "";
       }

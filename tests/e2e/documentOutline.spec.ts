@@ -21,12 +21,16 @@ async function sourceValue(page: Page) {
 test("statistics count readable Chinese and English text and reset on a new file", async ({ page }) => {
   await openDocument(page, "# **Hello**\n\n你好 [world](https://example.com/ignored)");
   await expect(page.locator(".word-count")).toHaveText("字数：4");
-  await expect(page.locator(".character-count")).toHaveText("字符：12");
+  await expect(page.locator(".character-count")).toHaveCount(0);
+  await page.locator(".document-statistics").click();
+  await expect(page.locator(".character-count")).toHaveText("字符数：13");
+  await expect(page.locator(".word-count")).toHaveCount(0);
   await showOutline(page); await expect(page.locator(".outline-label")).toHaveText(["Hello"]);
   await page.keyboard.press("Control+N");
   await expect(page.locator(".outline-empty")).toBeVisible();
+  await expect(page.locator(".character-count")).toHaveText("字符数：0");
+  await page.locator(".document-statistics").focus(); await page.keyboard.press("Space");
   await expect(page.locator(".word-count")).toHaveText("字数：0");
-  await expect(page.locator(".character-count")).toHaveText("字符：0");
 });
 
 test("source outline updates live, ignores code headings and jumps to the correct duplicate", async ({ page }) => {
@@ -62,12 +66,31 @@ test("WYSIWYG outline navigation scrolls to the heading without replacing the ed
 });
 
 for (const mode of ["wysiwyg", "source"]) {
+  test(`${mode}: switching counts includes spaces and punctuation without changing the document`, async ({ page }) => {
+    await openDocument(page, "你好， world! 😀");
+    if (mode === "source") await page.keyboard.press("Control+Shift+M");
+    const editor = page.locator(mode === "source" ? ".CodeMirror" : ".mu-editor");
+    await editor.evaluate(node => { Reflect.set(node, "countIdentity", true); });
+    const before = mode === "source" ? await sourceValue(page) : await editor.textContent();
+    await expect(page.locator(".word-count")).toHaveText("字数：3");
+    await page.locator(".document-statistics").click();
+    await expect(page.locator(".character-count")).toHaveText("字符数：12");
+    await expect(page.locator(".document-statistics")).toHaveAccessibleName(/字符数：12/);
+    await expect(page.locator(".dirty-dot")).toBeHidden();
+    expect(await page.evaluate(() => window.nativeFixture.writes)).toEqual([]);
+    expect(await editor.evaluate(node => Reflect.get(node, "countIdentity"))).toBe(true);
+    expect(mode === "source" ? await sourceValue(page) : await editor.textContent()).toBe(before);
+  });
   test(`${mode}: toggling the outline preserves editor identity and undo`, async ({ page }) => {
     await openDocument(page, "# Heading\n\nBody");
     if (mode === "source") await page.keyboard.press("Control+Shift+M");
     const editor = page.locator(mode === "source" ? ".CodeMirror" : ".mu-editor");
     await editor.evaluate(node => { Reflect.set(node, "outlineIdentity", true); });
     await editor.click(); await page.keyboard.press("Control+End"); await page.keyboard.insertText(" extra");
+    await expect(page.locator(".word-count")).toHaveText("字数：3");
+    await page.locator(".document-statistics").click();
+    await expect(page.locator(".character-count")).toHaveText("字符数：17");
+    await page.locator(".document-statistics").click();
     await expect(page.locator(".word-count")).toHaveText("字数：3");
     await showOutline(page); await page.locator(".outline-header button").click();
     await expect(page.locator("#outline-toggle")).toBeFocused();
@@ -86,7 +109,11 @@ test("language and mode switches keep the same counts, heading nodes and editor"
   await page.locator("#settings-language").selectOption("en"); await page.locator(".settings-apply").click();
   await expect(page.locator(".document-outline h2")).toHaveText("Document Outline");
   await expect(page.locator(".word-count")).toHaveText("Words: 4");
-  await expect(page.locator(".character-count")).toHaveText("Characters: 12");
+  await page.locator(".document-statistics").focus(); await page.keyboard.press("Enter");
+  await expect(page.locator(".character-count")).toHaveText("Characters: 13");
+  await page.keyboard.press("Control+Shift+M");
+  await expect(page.locator(".character-count")).toHaveText("Characters: 13");
+  await page.keyboard.press("Control+Shift+M");
   expect(await page.locator(".mu-editor").evaluate(node => Reflect.get(node, "outlineIdentity"))).toBe(true);
   await page.locator(".outline-heading").focus(); await page.keyboard.press("Enter");
   await expect(page.locator(".mu-editor")).toBeFocused();

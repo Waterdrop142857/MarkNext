@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import { t } from "../i18n";
 import type { DocumentStatistics } from "../services/documentAnalysis";
 withDefaults(
@@ -16,6 +17,7 @@ withDefaults(
   },
 );
 defineEmits<{ (event: "toggle-outline"): void }>();
+const countMode = ref<"words" | "characters">("words");
 </script>
 
 <template>
@@ -33,9 +35,11 @@ defineEmits<{ (event: "toggle-outline"): void }>();
       {{ t('status.wysiwyg') }}
     </span>
     <span v-if="selection" class="status-selection">{{ t('status.selection') }}</span>
-    <div class="document-statistics" :title="t('status.countDescription')">
-      <span class="word-count">{{ t('status.words', { count: statistics.words }) }}</span>
-      <span class="character-count">{{ t('status.characters', { count: statistics.characters }) }}</span>
-    </div>
+    <button type="button" class="document-statistics" :title="t('status.countDescription')"
+      :aria-label="`${t(countMode === 'words' ? 'status.words' : 'status.characters', { count: statistics[countMode] })}; ${t(countMode === 'words' ? 'status.showCharacters' : 'status.showWords')}`"
+      @click="countMode = countMode === 'words' ? 'characters' : 'words'">
+      <span v-if="countMode === 'words'" class="word-count">{{ t('status.words', { count: statistics.words }) }}</span>
+      <span v-else class="character-count">{{ t('status.characters', { count: statistics.characters }) }}</span>
+    </button>
   </footer>
 </template>

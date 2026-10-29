@@ -4,9 +4,19 @@ import { analyzeDocument, countText } from "../documentAnalysis";
 describe("document statistics and outline", () => {
   it("counts Chinese characters, other words and Unicode characters without Markdown syntax or destinations", () => {
     const result = analyzeDocument("# **你好** [world](https://example.com/ignored)\n\n`code` 😀");
-    expect(result.statistics).toEqual({ words: 4, characters: 12 });
+    expect(result.statistics).toEqual({ words: 4, characters: 14 });
     expect(result.headings.map(heading => heading.text)).toEqual(["你好 world"]);
-    expect(countText("你好world𠀀 don't 123 😀")).toEqual({ words: 6, characters: 17 });
+    expect(countText("你好world𠀀 don't 123 😀")).toEqual({ words: 6, characters: 20 });
+  });
+  it("includes punctuation and spaces only in characters, counting Unicode code points", () => {
+    expect(countText("你好， world! 😀")).toEqual({ words: 3, characters: 12 });
+    expect(countText(" ！？\t\r\n")).toEqual({ words: 0, characters: 4 });
+    expect(countText("𠀀😀")).toEqual({ words: 1, characters: 2 });
+  });
+  it("does not invent spaces for Markdown block, table or inline line breaks", () => {
+    expect(analyzeDocument("hello\nworld").statistics).toEqual({ words: 2, characters: 10 });
+    expect(analyzeDocument("**hello\nworld**").statistics).toEqual({ words: 2, characters: 10 });
+    expect(analyzeDocument("# One\n\n---\n\nTwo").statistics).toEqual({ words: 2, characters: 6 });
   });
   it("collects all six heading levels and Setext headings with source line numbers", () => {
     const result = analyzeDocument("# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six\n\nSetext\n======\n");
@@ -34,7 +44,8 @@ describe("document statistics and outline", () => {
   it("matches Muya's document-level outline for headings inside containers", () => {
     expect(analyzeDocument("> # Quoted\n\n- ## Listed\n\n# Document\n").headings.map(heading => heading.text)).toEqual(["Document"]);
   });
-  it("returns empty statistics and headings for empty and whitespace-only documents", () => {
-    expect(analyzeDocument(" \n\n")).toEqual({ statistics: { words: 0, characters: 0 }, headings: [] });
+  it("counts spaces in whitespace-only documents without counting line breaks", () => {
+    expect(analyzeDocument(" \n\n")).toEqual({ statistics: { words: 0, characters: 1 }, headings: [] });
+    expect(analyzeDocument("")).toEqual({ statistics: { words: 0, characters: 0 }, headings: [] });
   });
 });

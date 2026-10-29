@@ -933,7 +933,7 @@ export function generator(tokens: Token[], rebuildWrappers = false) {
 // (state/markdownToHtml.ts injects ids from `heading.textContent`). The TOC uses
 // it to show and slug headings by their rendered text instead of raw source
 // (#4811).
-export function tokensToPlainText(tokens: Token[]): string {
+export function tokensToPlainText(tokens: Token[], lineBreak = ' '): string {
     let result = '';
 
     for (const token of tokens) {
@@ -952,7 +952,7 @@ export function tokensToPlainText(tokens: Token[]): string {
             case 'del':
             case 'link':
             case 'reference_link':
-                result += tokensToPlainText(token.children);
+                result += tokensToPlainText(token.children, lineBreak);
                 break;
 
             case 'image':
@@ -962,7 +962,7 @@ export function tokensToPlainText(tokens: Token[]): string {
 
             case 'html_tag':
                 if (token.children)
-                    result += tokensToPlainText(token.children);
+                    result += tokensToPlainText(token.children, lineBreak);
                 else if (token.content)
                     result += token.content;
                 break;
@@ -988,7 +988,7 @@ export function tokensToPlainText(tokens: Token[]): string {
 
             case 'soft_line_break':
             case 'hard_line_break':
-                result += ' ';
+                result += lineBreak;
                 break;
 
             // header / hr / code_fence / multiple_math begin markers, the
