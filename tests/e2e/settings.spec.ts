@@ -170,8 +170,9 @@ for (const zoom of [75, 200]) {
   test(`${zoom}% zoom places context menus inside the viewport and resize handles on window edges`, async ({ page }) => {
     await page.goto("/tests/e2e/app.html"); await openSettings(page); await page.locator("#settings-zoom").fill(String(zoom)); await apply(page);
     await page.setViewportSize({ width: 640, height: 480 });
-    const edge = await page.locator(".resize-handle.e").boundingBox(); const bottom = await page.locator(".resize-handle.s").boundingBox();
-    expect(edge!.x + edge!.width).toBeCloseTo(640, 0); expect(bottom!.y + bottom!.height).toBeCloseTo(480, 0);
+    // setViewportSize can resolve before the browser delivers its resize event.
+    await expect.poll(async () => { const edge = await page.locator(".resize-handle.e").boundingBox(); return edge!.x + edge!.width; }).toBeCloseTo(640, 0);
+    await expect.poll(async () => { const bottom = await page.locator(".resize-handle.s").boundingBox(); return bottom!.y + bottom!.height; }).toBeCloseTo(480, 0);
     await page.locator(".titlebar-path").click({ button: "right" }); const menu = page.locator(".fluent-menu"); await expect(menu).toBeVisible();
     const box = await menu.boundingBox(); expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.y).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(641); expect(box!.y + box!.height).toBeLessThanOrEqual(481);

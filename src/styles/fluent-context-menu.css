@@ -3,7 +3,12 @@
 .fluent-menu {
   position: fixed;
   z-index: 9999;
-  min-width: 200px;
+  /* Size from content independently of the click position. Stretch grid rows
+     instead of cycling percentage row widths through an auto-sized menu. */
+  display: grid;
+  width: max-content;
+  min-width: min(200px, calc(var(--app-viewport-width, 100vw) - 16px));
+  max-width: calc(var(--app-viewport-width, 100vw) - 16px);
   padding: 4px;
   background: var(--fluent-menu-bg, #ffffff);
   border: 1px solid var(--fluent-menu-border, #e5e5e5);
@@ -18,7 +23,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  min-width: 0;
   padding: 0 10px;
   border: none;
   border-radius: var(--app-ui-control-radius);
@@ -74,6 +79,9 @@
 }
 
 .fluent-menu-shortcut {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--fluent-menu-shortcut, #888888);
   font-size: 12px;
   margin-left: 24px;
