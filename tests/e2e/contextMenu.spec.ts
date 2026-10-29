@@ -59,7 +59,9 @@ for (const language of ["zh-CN", "en"]) {
       await checkMenu(page, zoom, 16);
       await page.keyboard.press("Control+N");
       await expect(page.locator(".mu-editor")).toBeVisible();
-      await checkMenu(page, zoom, 200);
+      const editor = await page.locator(".editor-area").boundingBox();
+      expect(editor).not.toBeNull();
+      await checkMenu(page, zoom, editor!.y + editor!.height / 2);
     });
   }
 }

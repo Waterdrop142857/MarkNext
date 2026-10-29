@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
 
 mod recovery;
+mod window_instance;
 static DOCUMENT_IO_LOCK: Mutex<()> = Mutex::new(());
 
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -213,6 +214,44 @@ async fn read_file(
     tauri::async_runtime::spawn_blocking(move || read_file_sync(path, default_encoding))
         .await
         .map_err(|error| error.to_string())?
+}
+
+fn canonical_document_path_sync(path: &Path) -> io::Result<String> {
+    let canonical = match fs::metadata(path) {
+        Ok(metadata) => {
+            if !metadata.is_file() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Expected a file path",
+                ));
+            }
+            fs::canonicalize(path)?
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let name = path
+                .file_name()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Missing file name"))?;
+            let parent = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            fs::canonicalize(parent)?.join(name)
+        }
+        Err(error) => return Err(error),
+    };
+    canonical
+        .into_os_string()
+        .into_string()
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Path is not valid Unicode"))
+}
+
+#[tauri::command]
+async fn canonical_document_path(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        canonical_document_path_sync(Path::new(&path)).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 fn read_file_sync(
@@ -439,11 +478,27 @@ fn open_devtools(_app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let instance = window_instance::WindowInstance::default();
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let initial = window_instance::paths_from_args(
+        std::env::args_os().filter_map(|argument| argument.into_string().ok()),
+        &cwd,
+    );
+    if !initial.is_empty() {
+        let _ = instance.enqueue(initial);
+    }
+    let builder = tauri::Builder::default().manage(instance);
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        let paths = window_instance::paths_from_args(args, Path::new(&cwd));
+        window_instance::deliver(app, paths);
+    }));
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             read_file,
+            canonical_document_path,
             allow_image_file,
             write_file,
             file_version,
@@ -451,16 +506,92 @@ pub fn run() {
             recovery::recovery_list,
             recovery::recovery_write,
             recovery::recovery_remove,
+            window_instance::pending_open_requests,
+            window_instance::acknowledge_open_request,
             open_devtools
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            match &event {
+                tauri::RunEvent::Opened { urls } => {
+                    let paths = urls
+                        .iter()
+                        .filter_map(|url| {
+                            url.to_file_path().ok()?.into_os_string().into_string().ok()
+                        })
+                        .collect();
+                    window_instance::deliver(app, paths);
+                }
+                tauri::RunEvent::Reopen { .. } => window_instance::focus_main(app, true),
+                _ => {}
+            }
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
+                if let Some(window) = app
+                    .get_webview_window(window_instance::MAIN_WINDOW)
+                    .filter(|_| code.is_none() || code == Some(0))
+                {
+                    // Native application-menu Quit follows the same frontend
+                    // confirmation path as the titlebar close button.
+                    api.prevent_exit();
+                    if code == Some(0) {
+                        let _ = window.close();
+                    }
+                    return;
+                }
+                // A file-manager launch may arrive while the old WebView is
+                // closing. Keep the primary process and deliver to one new main
+                // window rather than acknowledging and losing that request.
+                if code.is_none() && app.state::<window_instance::WindowInstance>().has_pending() {
+                    api.prevent_exit();
+                    window_instance::focus_main(app, true);
+                }
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
     use super::{atomic_write, decode_document, encode_document, FileEncoding};
     use std::fs;
+
+    #[test]
+    fn document_paths_resolve_existing_aliases_and_new_file_parents() {
+        let directory = std::env::temp_dir().join(format!(
+            "marknext-path-{}-{}",
+            std::process::id(),
+            super::TEMP_FILE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        fs::create_dir_all(directory.join("nested")).unwrap();
+        fs::write(directory.join("note.md"), "text").unwrap();
+        let canonical = fs::canonicalize(&directory).unwrap();
+        assert_eq!(
+            super::canonical_document_path_sync(&directory.join("nested/../note.md")).unwrap(),
+            canonical.join("note.md").to_str().unwrap()
+        );
+        assert_eq!(
+            super::canonical_document_path_sync(&directory.join("nested/../new.md")).unwrap(),
+            canonical.join("new.md").to_str().unwrap()
+        );
+        assert!(super::canonical_document_path_sync(&directory).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(directory.join("note.md"), directory.join("alias.md"))
+                .unwrap();
+            assert_eq!(
+                super::canonical_document_path_sync(&directory.join("alias.md")).unwrap(),
+                canonical.join("note.md").to_str().unwrap()
+            );
+            std::os::unix::fs::symlink(&directory, directory.join("alias-folder")).unwrap();
+            assert_eq!(
+                super::canonical_document_path_sync(&directory.join("alias-folder/new.md"))
+                    .unwrap(),
+                canonical.join("new.md").to_str().unwrap()
+            );
+        }
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn encoding_writes_known_bytes_and_bom() {

@@ -14,7 +14,7 @@ async function openDocument(page: Page, content?: string) {
 }
 
 for (const choice of ["取消", "不保存", "保存"]) {
-  test(`protects edits typed while a file read is pending: ${choice}`, async ({ page }) => {
+  test(`retains edits during a multi-file open and protects closing the old tab: ${choice}`, async ({ page }) => {
     await openDocument(page);
     await page.evaluate(answer => {
       const f = window.nativeFixture;
@@ -27,6 +27,9 @@ for (const choice of ["取消", "不保存", "保存"]) {
     await page.keyboard.type(" pending edit");
     await expect(page.locator(".mu-editor")).toContainText("pending edit");
     await page.evaluate(() => window.nativeFixture.finishRead());
+    await expect(page.getByRole("tab", { selected: true })).toContainText("new.md");
+    expect(await page.evaluate(() => window.nativeFixture.prompts)).toEqual([]);
+    await page.getByRole("button", { name: "关闭 old.md", exact: true }).click();
     await expect.poll(() => page.evaluate(() => window.nativeFixture.prompts.length)).toBe(1);
     if (choice === "取消") await expect(page.locator(".mu-editor")).toContainText("pending edit");
     else await expect(page.locator(".mu-editor")).toContainText("replacement");

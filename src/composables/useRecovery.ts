@@ -81,9 +81,9 @@ export function useRecovery(workspace: ReturnType<typeof useWorkspace>, options:
     else schedule();
   }, { flush: "post" });
 
-  async function start(): Promise<void> {
+  async function start(initial?: RecoveryListing): Promise<void> {
     try {
-      const listing = await invoke<RecoveryListing>("recovery_list");
+      const listing = initial ?? await invoke<RecoveryListing>("recovery_list");
       listing.records.forEach(record => known.add(record.id));
       records.value = listing.records.filter(record => record.id !== workspace.documentId.value);
       unreadable.value = listing.unreadable;

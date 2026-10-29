@@ -10,13 +10,13 @@ import FluentContextMenu from "./components/FluentContextMenu.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import RecoveryDialog from "./components/RecoveryDialog.vue";
 import { fontStack, type Preferences, type SettingsCategory } from "./config/preferences";
-import { cloneBindings, type ShortcutBindings } from "./config/shortcuts";
+import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/shortcuts";
 import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
 import type { Muya, IMuyaOptions } from "./muya";
-import { useWorkspace } from "./composables/useWorkspace";
-import { useDocumentActions } from "./composables/useDocumentActions";
-import { useRecovery } from "./composables/useRecovery";
+import { useDocumentTabs } from "./composables/useDocumentTabs";
+import { useNativeFileRequests } from "./composables/useNativeFileRequests";
+import DocumentTabs from "./components/DocumentTabs.vue";
 import { useDocumentAnalysis } from "./composables/useDocumentAnalysis";
 import type { OutlineHeading } from "./services/documentAnalysis";
 import type { RecoverySnapshot, RecoveryView } from "./services/documentSafety";
@@ -32,7 +32,19 @@ import type { IHistorySelection } from "./muya/selection/types";
 
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
-const workspace = useWorkspace(() => preferences.value.defaultEncoding);
+const documentTabs = useDocumentTabs(() => preferences.value.defaultEncoding, {
+  editor: () => editorSessionRef.value,
+  getView: captureView,
+  applyView,
+  closeWindow: async () => {
+    try {
+      if (!(await recovery.prepareExit())) throw new Error(t("recovery.cleanupError"));
+      await destroyWindow();
+    }
+    catch (error) { recovery.resume(); await recovery.flush(); throw error; }
+  },
+});
+const workspace = documentTabs.workspace;
 const {
   markdown,
   currentFilePath,
@@ -134,38 +146,36 @@ watch([
 }, { immediate: true });
 
 const openMenuId = ref<string | null>(null);
-const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[] } | null>(null);
+const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[]; tabId?: string } | null>(null);
 const muyaEditor = shallowRef<Muya | null>(null);
 const editorSessionRef = ref<InstanceType<typeof EditorSession> | null>(null);
 const sourceEditorRef = computed(() => editorSessionRef.value?.getSource() ?? null);
-const contentRevision = ref(0);
-watch(markdown, () => { contentRevision.value++; }, { flush: "sync" });
-const editorIdentity = computed(() => ({ documentId: workspace.documentId.value, revision: contentRevision.value }));
+const editorIdentity = documentTabs.identity;
+const editorCheckpoint = documentTabs.checkpoint;
 
-function flushEditor() {
-  editorSessionRef.value?.flush();
+function flushEditor() { editorSessionRef.value?.flush(); }
+const documentActions = documentTabs.actions;
+const recovery = documentTabs.recovery;
+const nativeFiles = useNativeFileRequests(async paths => {
+  const done = await documentTabs.openPaths(paths);
+  if (done && paths.length) { focusEditor(); await checkDisk(); }
+  return done;
+});
+
+function focusEditor() {
+  if (isSourceMode.value) sourceEditorRef.value?.focus(); else muyaEditor.value?.focus();
 }
-
-const documentActions = useDocumentActions(workspace, {
-  flushEditor,
-  closeWindow: async () => {
-    try {
-      if (!(await recovery.prepareExit())) throw new Error(t("recovery.cleanupError"));
-      await destroyWindow();
-    }
-    catch (error) { recovery.resume(); await recovery.flush(); throw error; }
-  },
-});
-
-const recovery = useRecovery(workspace, {
-  flushEditor,
-  getView: captureView,
-});
+async function activateTab(id: string, focus = true) {
+  if (await documentTabs.activate(id)) { if (focus) focusEditor(); await checkDisk(); }
+}
+async function closeTab(id: string) {
+  if (await documentTabs.close(id)) { focusEditor(); await checkDisk(); }
+}
 
 function captureView(): RecoveryView {
   return isSourceMode.value
     ? { scrollTop: sourceEditorRef.value?.getScrollTop() ?? 0, sourceCursor: sourceEditorRef.value?.getCursorOffset() ?? undefined }
-    : { scrollTop: muyaEditor.value?.domNode.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
+    : { scrollTop: muyaEditor.value?.domNode.parentElement?.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
 }
 
 function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
@@ -179,7 +189,8 @@ function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
     else if (muyaEditor.value) {
       const selection = view?.muyaSelection;
       if (selection) muyaEditor.value.setCursor({ anchor: selection.anchor, anchorPath: selection.anchor.path, focus: selection.focus, focusPath: selection.focus.path });
-      muyaEditor.value.domNode.scrollTop = view?.scrollTop ?? 0;
+      const scrollHost = muyaEditor.value.domNode.parentElement;
+      if (scrollHost) scrollHost.scrollTop = view?.scrollTop ?? 0;
     }
   }
   catch { /* Content has already been restored; use the editor's default view. */ }
@@ -202,13 +213,12 @@ async function restoreDocument(record: RecoverySnapshot) {
   try {
     if (!(await documentActions.restore(record))) return;
     await nextTick();
-    applyView(record.view, record.sourceMode);
     // Persist the new session before retiring the recovered record. A failed
     // backup keeps the original recovery record available on the next launch.
     if (await recovery.flush()) await recovery.remove(record.id);
     recoveryOpen.value = false;
     await nextTick();
-    if (record.sourceMode) sourceEditorRef.value?.focus(); else muyaEditor.value?.focus();
+    focusEditor();
   }
   finally { recoveryBusy.value = false; }
 }
@@ -253,7 +263,6 @@ function captureMuyaSelection(): IHistorySelection | null {
 watch(documentGeneration, () => {
   activeHeading.value = null;
   muyaEditor.value = null;
-  isSourceMode.value = false;
 }, { flush: "sync" });
 
 async function toggleEditorMode() {
@@ -279,6 +288,7 @@ const menus = computed(() => appMenus.map((menu) => {
       ...item,
       label: t(item.label),
       shortcut: commandShortcut(item.id),
+      disabled: item.disabled || documentTabs.busy.value || (!documentTabs.active.value && ["save", "saveAs", "saveAll", "close", "closeAll"].includes(item.id)),
       checked: menu.id !== "theme" ? item.checked : item.id === "theme-light"
         ? themeMode.value === "light"
         : item.id === "theme-dark"
@@ -288,19 +298,14 @@ const menus = computed(() => appMenus.map((menu) => {
   };
 }));
 
-const pathText = computed(() => {
-  if (currentFilePath.value) {
-    const parts = currentFilePath.value.split(/[\\/]/);
-    return parts[parts.length - 1] || currentFilePath.value;
-  }
-  return isUntitled.value ? t("document.untitled") : t("document.none");
-});
+const pathText = documentTabs.title;
 
 function toggleMenu(menuId: string) {
   openMenuId.value = openMenuId.value === menuId ? null : menuId;
 }
 
 function runMenuCommand(itemId: string) {
+  if (documentTabs.busy.value) return;
   openMenuId.value = null;
 
   switch (itemId) {
@@ -308,13 +313,15 @@ function runMenuCommand(itemId: string) {
     case "open":
     case "save":
     case "saveAs":
+    case "saveAll":
+    case "closeAll":
+    case "nextTab":
+    case "previousTab":
     case "close":
     case "exit":
     case "overwrite":
       void documentActions.run(itemId).then((done) => {
-        if (done && ["new", "open"].includes(itemId)) {
-          void nextTick(() => muyaEditor.value?.focus());
-        }
+        if (done) { void nextTick(focusEditor); void checkDisk(); }
       });
       break;
     case "reload":
@@ -547,25 +554,41 @@ function appContextMenuItems(): FluentMenuItem[] {
   ];
 }
 
+function tabContextMenuItems(): FluentMenuItem[] {
+  return [
+    { id: "tabClose", label: t("command.close"), shortcut: commandShortcut("close") },
+    { id: "closeAll", label: t("command.closeAll"), shortcut: commandShortcut("closeAll") },
+  ];
+}
+
 watch(locale, () => {
   if (contextMenu.value) {
     const editorMenu = contextMenu.value.items.some(item => item.id === "undo");
-    contextMenu.value.items = editorMenu ? editorContextMenuItems() : appContextMenuItems();
+    contextMenu.value.items = contextMenu.value.tabId ? tabContextMenuItems() : editorMenu ? editorContextMenuItems() : appContextMenuItems();
   }
 });
 
 function handleContextMenu(event: MouseEvent) {
   event.preventDefault();
+  if (documentTabs.busy.value) return;
   const target = event.target as HTMLElement | null;
+  const tabId = target?.closest<HTMLElement>(".document-tab")?.dataset.tabId;
   const inEditor = !!target?.closest(".editor-area");
   contextMenu.value = {
     x: event.clientX / (preferences.value.zoom / 100),
     y: event.clientY / (preferences.value.zoom / 100),
-    items: inEditor ? editorContextMenuItems() : appContextMenuItems(),
+    items: tabId ? tabContextMenuItems() : inEditor ? editorContextMenuItems() : appContextMenuItems(),
+    tabId,
   };
 }
 
 function runContextCommand(itemId: string) {
+  if (documentTabs.busy.value) return;
+  if (itemId === "tabClose") {
+    const id = contextMenu.value?.tabId;
+    if (id) void closeTab(id);
+    return;
+  }
   switch (itemId) {
     case "undo":
       editorUndo();
@@ -591,12 +614,21 @@ function runContextCommand(itemId: string) {
   }
 }
 
-const handleGlobalKeydown = createShortcutHandler({
+const handleShortcut = createShortcutHandler({
   bindings: () => shortcutBindings.value,
   defaults: defaultBindings,
   blocked: () => settingsOpen.value || recoveryOpen.value,
   execute: runMenuCommand,
 });
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (documentTabs.busy.value) {
+    if (resolveShortcut(event, shortcutBindings.value)) {
+      event.preventDefault(); event.stopImmediatePropagation();
+    }
+    return;
+  }
+  handleShortcut(event);
+}
 
 onMounted(() => {
   window.addEventListener("resize", updateViewportSize);
@@ -652,9 +684,16 @@ onBeforeUnmount(() => {
       @command="runMenuCommand"
     />
 
+    <DocumentTabs :tabs="documentTabs.tabs.value" :active-id="documentTabs.active.value?.id ?? null"
+      :busy="documentTabs.busy.value" @activate="activateTab" @close="closeTab" @new="runMenuCommand('new')" />
+
     <div v-if="openMenuId" class="menu-overlay" @click="openMenuId = null" />
 
-    <div v-if="externalChange || recoveredCopy || recovery.failed.value || recovery.records.value.length || recovery.unreadable.value" class="document-notices ui-scroll-region">
+    <div v-if="externalChange || recoveredCopy || recovery.failed.value || recovery.records.value.length || recovery.unreadable.value || nativeFiles.failed.value" class="document-notices ui-scroll-region">
+      <div v-if="nativeFiles.failed.value" class="document-notice ui-controls" role="alert">
+        <span>{{ t('tabs.nativeOpenError') }}</span>
+        <button type="button" @click="nativeFiles.retry()">{{ t('recovery.retry') }}</button>
+      </div>
       <div v-if="externalChange" class="document-notice ui-controls" role="status">
         <span>{{ t(`safety.${externalChange.kind}`) }}</span>
         <button v-if="externalChange.kind === 'changed'" type="button" @click="runMenuCommand('reload')">{{ t('safety.reload') }}</button>
@@ -705,7 +744,9 @@ onBeforeUnmount(() => {
 
     <div class="workspace-body">
       <DocumentOutline v-if="outlineOpen" :headings="analysis.headings" :active-id="activeHeading" @navigate="navigateOutline" @close="closeOutline" />
-      <main class="editor-area" :class="{ 'source-mode': isSourceMode }">
+      <main id="document-panel" class="editor-area" :class="{ 'source-mode': isSourceMode }"
+        :inert="documentTabs.locked.value"
+        :role="documentTabs.active.value ? 'tabpanel' : undefined" :aria-labelledby="documentTabs.active.value ? `document-tab-${documentTabs.active.value.id}` : undefined">
         <div v-if="!isUntitled && !currentFilePath && !markdown" class="empty-state">
           <p>{{ t('document.empty') }}</p>
           <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
@@ -716,6 +757,7 @@ onBeforeUnmount(() => {
           ref="editorSessionRef"
           :options="editorAppearance"
           :identity="editorIdentity"
+          :checkpoint="editorCheckpoint"
           :document-path="currentFilePath"
           v-model="markdown"
           v-model:source-mode="isSourceMode"

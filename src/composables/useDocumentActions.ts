@@ -7,7 +7,7 @@ export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "exi
 
 export function useDocumentActions(
   workspace: ReturnType<typeof useWorkspace>,
-  options: { flushEditor: () => void; closeWindow: () => Promise<void> },
+  options: { flushEditor: () => void; closeWindow: () => Promise<void>; documentName?: () => string },
 ) {
   let pending = false;
   let lastExternalPrompt: { generation: number; version: string } | null = null;
@@ -17,7 +17,7 @@ export function useDocumentActions(
     while (workspace.dirty.value) {
       const generation = workspace.documentGeneration.value;
       const promptedContent = workspace.markdown.value;
-      const choice = await askUnsavedChanges();
+      const choice = await askUnsavedChanges(options.documentName?.());
       if (choice === "cancel") return false;
       options.flushEditor();
       if (workspace.documentGeneration.value !== generation) return false;
@@ -105,5 +105,5 @@ export function useDocumentActions(
     finally { pending = false; }
   }
 
-  return { run, restore, reviewExternalChange, isPending: () => pending };
+  return { run, restore, reviewExternalChange, confirmReplacement, isPending: () => pending };
 }

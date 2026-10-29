@@ -3,16 +3,20 @@ import { t } from "../i18n";
 
 export type UnsavedChangesChoice = "save" | "discard" | "cancel";
 
-export async function askUnsavedChanges(): Promise<UnsavedChangesChoice> {
+export async function askUnsavedChanges(documentName?: string): Promise<UnsavedChangesChoice> {
   // Capture labels for this dialog: changing language while it is open must
   // not change how its eventual response is interpreted.
   const buttons = { yes: t("command.save"), no: t("dialog.discard"), cancel: t("common.cancel") };
-  const result = await message(t("dialog.unsaved"), {
+  const result = await message(documentName ? t("dialog.unsavedNamed", { name: documentName }) : t("dialog.unsaved"), {
     title: "MarkNext", kind: "warning", buttons,
   });
   if (result === buttons.yes || result === "Yes") return "save";
   if (result === buttons.no || result === "No") return "discard";
   return "cancel";
+}
+
+export async function informFileAlreadyOpen(path: string): Promise<void> {
+  await message(t("tabs.pathInUse", { path }), { title: "MarkNext", kind: "warning", buttons: { ok: t("common.ok") } });
 }
 
 export async function showError(action: string, error: unknown): Promise<void> {

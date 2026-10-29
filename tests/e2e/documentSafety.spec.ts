@@ -130,7 +130,7 @@ test("recovery after an external change opens a copy and preserves the original"
 
 test("discarding a document clears its backup, while exiting leaves unreviewed records intact", async ({ page }) => {
   await source(page, "discard me", true); await backup(page, "discard me");
-  await page.evaluate(() => window.nativeFixture.choices.push("No")); await page.keyboard.press("Control+N");
+  await page.evaluate(() => window.nativeFixture.choices.push("No")); await page.keyboard.press("Control+W");
   await expect.poll(() => page.evaluate(() => Object.keys(window.nativeFixture.recovery).length)).toBe(0);
   await source(page, "keep for later", true); await backup(page, "keep for later");
   await page.reload(); await expect(page.getByRole("button", { name: "查看恢复记录", exact: true })).toBeVisible();

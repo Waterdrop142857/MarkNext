@@ -65,18 +65,18 @@ for (const [system, locale] of [["en-GB", "en"], ["zh-TW", "zh-CN"], ["fr-FR", "
   });
 }
 
-for (const [choice, expected] of [["Cancel", "original edit"], ["Don't Save", ""], ["Save", ""]] as const) {
+for (const choice of ["Cancel", "Don't Save", "Save"] as const) {
   test(`English unsaved dialog: ${choice} preserves the document action semantics`, async ({ page }) => {
     await page.goto("/tests/e2e/app.html"); await openDocument(page); await switchLanguage(page, true);
     await page.keyboard.press("Control+Shift+M"); await expect(page.locator(".source-editor")).toBeVisible();
     await page.keyboard.press("Control+End"); await page.keyboard.type(" edit");
     expect(await sourceValue(page)).toBe("original edit");
     await page.evaluate(choice => { window.nativeFixture.choices = [choice]; }, choice);
-    await page.keyboard.press("Control+N");
-    await expect.poll(() => page.evaluate(() => window.nativeFixture.prompts)).toEqual(["The current file has unsaved changes."]);
+    await page.keyboard.press("Control+W");
+    await expect.poll(() => page.evaluate(() => window.nativeFixture.prompts)).toEqual(["“old.md” has unsaved changes. Save before closing?"]);
     expect(await page.evaluate(() => window.nativeFixture.promptButtons)).toEqual([{ YesNoCancelCustom: ["Save", "Don't Save", "Cancel"] }]);
-    if (choice === "Cancel") expect(await sourceValue(page)).toBe(expected);
-    else { await expect(page.locator(".titlebar-path")).toContainText("Untitled"); await expect(page.locator(".mu-editor")).toHaveText(""); }
+    if (choice === "Cancel") expect(await sourceValue(page)).toBe("original edit");
+    else await expect(page.locator(".empty-state")).toBeVisible();
     const writes = await page.evaluate(() => window.nativeFixture.writes);
     expect(writes).toEqual(choice === "Save" ? [{ path: "/old.md", content: "original edit" }] : []);
   });

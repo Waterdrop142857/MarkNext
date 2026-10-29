@@ -1,10 +1,16 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { emit } from "@tauri-apps/api/event";
 import type { RecoverySnapshot } from "../../src/services/documentSafety";
 
 // Test-only entry point. The production bundle starts from index.html and
 // never imports these native mocks; all UI/editor code remains the real app.
 export interface NativeFixture {
-  openPath: string;
+  openPath: string | string[] | null;
+  pathAliases: Record<string, string>;
+  notifications: string[];
+  openRequests: { id: number; paths: string[] }[];
+  openRequestAcks: number[];
+  deliverFiles(paths: string[]): Promise<void>;
   savePath: string;
   allowedImages: string[];
   disk: Record<string, string>;
@@ -28,7 +34,13 @@ declare global { interface Window { nativeFixture: NativeFixture } }
 let completeRead: (() => void) | null = null;
 const fixture: NativeFixture = {
   openPath: "/old.md", disk: JSON.parse(localStorage.getItem("test-disk") ?? '{"/old.md":"original","/new.md":"replacement"}'),
-  savePath: "/saved.md", allowedImages: [],
+  savePath: "/saved.md", allowedImages: [], pathAliases: {}, notifications: [],
+  openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [],
+  async deliverFiles(paths) {
+    const id = Math.max(0, ...fixture.openRequests.map(request => request.id), ...fixture.openRequestAcks) + 1;
+    fixture.openRequests.push({ id, paths });
+    await emit("open-files-available");
+  },
   choices: [], prompts: [], promptButtons: [], dialogTitles: [], errors: [], reads: [], writes: [], writeFormats: [], fileFormats: {}, delayReads: false,
   readPending: false, destroyed: false, recovery: JSON.parse(localStorage.getItem("test-recovery") ?? "{}"),
   finishRead() {
@@ -38,6 +50,7 @@ const fixture: NativeFixture = {
   },
 };
 window.nativeFixture = fixture;
+Object.defineProperty(window, "isTauri", { value: true, configurable: true });
 mockWindows("main");
 // Native asset URLs are represented by a local SVG fixture in browser tests.
 // Production still uses the SDK's real platform-specific convertFileSrc.
@@ -45,8 +58,20 @@ const internals: { convertFileSrc: (path: string) => string } = Reflect.get(wind
 internals.convertFileSrc = path => `/tests/e2e/fixtures/pixel.svg?path=${encodeURIComponent(path)}`;
 mockIPC((command, args) => {
   const payload = args && !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array) ? args : {};
+  if (command === "pending_open_requests") return structuredClone(fixture.openRequests);
+  if (command === "acknowledge_open_request") {
+    fixture.openRequestAcks.push(Number(payload.id));
+    fixture.openRequests = fixture.openRequests.filter(request => request.id !== payload.id);
+    return;
+  }
   if (command === "plugin:dialog|open") { fixture.dialogTitles.push(String(payload.options && (payload.options as { title?: string }).title)); return fixture.openPath; }
   if (command === "plugin:dialog|save") return fixture.savePath;
+  if (command === "canonical_document_path") {
+    const path = String(payload.path);
+    const normalized: string[] = [];
+    for (const part of path.split("/")) { if (part === "..") normalized.pop(); else if (part && part !== ".") normalized.push(part); }
+    return fixture.pathAliases[path] ?? `/${normalized.join("/")}`;
+  }
   if (command === "allow_image_file") { fixture.allowedImages.push(String(payload.path)); return; }
   if (command === "recovery_list") return { records: Object.values(fixture.recovery), unreadable: 0 };
   if (command === "recovery_write") {
@@ -61,6 +86,7 @@ mockIPC((command, args) => {
   if (command === "file_status") return version(String(payload.path));
   if (command === "plugin:dialog|message") {
     if (payload.kind === "error") { fixture.errors.push(String(payload.message)); return "Ok"; }
+    if (payload.buttons && typeof payload.buttons === "object" && "OkCustom" in payload.buttons) { fixture.notifications.push(String(payload.message)); return "Ok"; }
     fixture.prompts.push(String(payload.message));
     fixture.promptButtons.push(payload.buttons);
     const choice = fixture.choices.shift();

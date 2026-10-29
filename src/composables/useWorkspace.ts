@@ -6,7 +6,9 @@ import { defaultPreferences, defaultFileFormat, type FileEncoding, type FileForm
 import { showError } from "../services/dialogs";
 import { conflictVersion, newDocumentId, type ExternalChange, type ReadDocument, type RecoverySnapshot } from "../services/documentSafety";
 
-export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defaultPreferences.defaultEncoding) {
+export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defaultPreferences.defaultEncoding, options: {
+  resolveSavePath?: (path: string) => Promise<string | null>;
+} = {}) {
   const markdown = ref("");
   const currentFilePath = ref<string | null>(null);
   const savedMarkdown = ref("");
@@ -144,14 +146,16 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     const task = (async () => {
       const generation = documentGeneration.value;
       try {
-        const selected = await save({
+        const choice = await save({
           title: t("command.saveAs"),
           filters: [
             { name: "Markdown", extensions: ["md", "markdown", "txt"] },
           ],
           defaultPath: currentFilePath.value ?? "untitled.md",
         });
-        if (typeof selected !== "string" || documentGeneration.value !== generation) return false;
+        if (typeof choice !== "string" || documentGeneration.value !== generation) return false;
+        const selected = options.resolveSavePath ? await options.resolveSavePath(choice) : choice;
+        if (!selected || documentGeneration.value !== generation) return false;
         const expected = selected === currentFilePath.value ? undefined : await invoke<string>("file_version", { path: selected });
         if (documentGeneration.value !== generation) return false;
         return await writeSnapshot(selected, markdown.value, true, expected);
@@ -275,6 +279,10 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     selection,
     dirty,
     openFile,
+    openPath: async (path: string) => {
+      try { return await replaceFromDisk(path); }
+      catch (error) { await showError(t("error.open"), error); return false; }
+    },
     newFile,
     saveFileAs,
     saveFile,

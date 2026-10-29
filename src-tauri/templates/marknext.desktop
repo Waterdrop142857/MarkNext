@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+Comment=Markdown editor
+Exec={{exec}} %U
+Icon={{icon}}
+Terminal=false
+StartupNotify=true
+StartupWMClass={{exec}}
+Categories=Office;TextEditor;
+MimeType=text/markdown;text/plain;
