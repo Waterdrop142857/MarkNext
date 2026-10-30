@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { newDocumentId } from "../services/documentSafety";
+import { newDocumentId } from "./identity";
 import type { ExternalChange, FileFormat } from "./types";
 
 /** Mutable refs have one owner per document; callers must not copy the state. */

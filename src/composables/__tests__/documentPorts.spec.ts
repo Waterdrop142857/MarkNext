@@ -45,3 +45,16 @@ it("uses the injected prompt and leaves the document untouched when replacement 
   expect(workspace.markdown.value).toBe("unsaved");
   expect(workspace.dirty.value).toBe(true);
 });
+
+it("handles a typed file conflict without using native error objects", async () => {
+  const { DocumentConflict } = await import("../../document/errors");
+  const ports = memoryPorts();
+  ports.files.write = async () => { throw new DocumentConflict("v3"); };
+  const showError = vi.spyOn(ports.prompts, "error");
+  const workspace = createDocumentController(() => "utf-8", ports);
+  await workspace.openFile(); workspace.markdown.value = "local edit";
+  expect(await workspace.saveFile()).toBe(false);
+  expect(workspace.externalChange.value).toEqual({ kind: "changed", version: "v3" });
+  expect(workspace.dirty.value).toBe(true);
+  expect(showError).not.toHaveBeenCalled();
+});

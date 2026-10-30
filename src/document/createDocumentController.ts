@@ -1,5 +1,6 @@
 import { defaultFileFormat, type FileEncoding } from "./types";
-import { conflictVersion, newDocumentId } from "../services/documentSafety";
+import { newDocumentId } from "./identity";
+import { DocumentConflict } from "./errors";
 import type { ExternalChange, RecoverySnapshot } from "./types";
 import type { DocumentPorts } from "./ports";
 import { useDocumentState } from "./useDocumentState";
@@ -106,7 +107,7 @@ export function createDocumentController(getDefaultEncoding: () => FileEncoding,
       return true;
     }
     catch (error) {
-      const version = conflictVersion(error);
+      const version = error instanceof DocumentConflict ? error.version : null;
       if (version !== null && documentGeneration.value === generation && currentFilePath.value === path) {
         setExternalChange({ kind: version === "missing" ? "deleted" : "changed", version });
         return false;

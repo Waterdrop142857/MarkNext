@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { t } from "../../i18n";
 import { askUnsavedChanges, askOverwrite, askExternalChange, informFileAlreadyOpen, showError } from "../../services/dialogs";
+import { DocumentConflict } from "../../document/errors";
 import type { DocumentErrorContext, DocumentPorts } from "../../document/ports";
 import type { ReadDocument, RecoveryListing } from "../../document/types";
 
@@ -16,10 +17,26 @@ export function createTauriDocumentPorts(): DocumentPorts {
   return {
     files: {
       canonicalPath: path => invoke<string>("canonical_document_path", { path }),
-      read: (path, defaultEncoding) => invoke<ReadDocument>("read_file", { path, defaultEncoding }),
+      async read(path, defaultEncoding) {
+        const document = await invoke<ReadDocument>("read_file", { path, defaultEncoding });
+        if (!document || typeof document.version !== "string") throw new Error("Missing document version");
+        return document;
+      },
       stamp: path => invoke<string>("file_status", { path }),
       version: path => invoke<string>("file_version", { path }),
-      write: (path, content, format, expectedVersion) => invoke<string>("write_file", { path, content, ...format, expectedVersion }),
+      async write(path, content, format, expectedVersion) {
+        try {
+          const version = await invoke<string>("write_file", { path, content, ...format, expectedVersion });
+          if (typeof version !== "string") throw new Error("Missing saved document version");
+          return version;
+        } catch (error) {
+          if (error && typeof error === "object" && "code" in error && error.code === "conflict"
+            && "version" in error && typeof error.version === "string") {
+            throw new DocumentConflict(error.version, "message" in error && typeof error.message === "string" ? error.message : undefined);
+          }
+          throw error;
+        }
+      },
     },
     picker: {
       async openOne() {
