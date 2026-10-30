@@ -28,6 +28,7 @@ const emit = defineEmits<{
   (event: "document-change", value: EditorEvent<string>): void;
   (event: "mode-change", value: EditorEvent<boolean>): void;
   (event: "ready", value: EditorEvent<boolean>): void;
+  (event: "availability", value: EditorEvent<boolean>): void;
   (event: "selection-change", value: EditorEvent<boolean>): void;
   (event: "error", error: unknown): void;
 }>();
@@ -57,9 +58,10 @@ function editorEvent<T>(value: T): EditorEvent<T> {
   return { documentId: props.identity.documentId, generation: props.generation, value };
 }
 function onReady(value: Muya) { muya.value = value; }
-const ready = computed(() => !suspended.value && !composing.value && !transitioning.value
-  && (props.sourceMode ? !!sourceRef.value : !!muya.value));
+const ready = computed(() => !suspended.value && (props.sourceMode ? !!sourceRef.value : !!muya.value));
+const available = computed(() => ready.value && !composing.value && !transitioning.value);
 watch(ready, value => emit("ready", editorEvent(value)), { immediate: true });
+watch(available, value => emit("availability", editorEvent(value)), { immediate: true });
 function failed(error: unknown) { restoreError = error; emit("error", error); }
 function compositionStart() { composing.value = true; }
 function compositionEnd() {

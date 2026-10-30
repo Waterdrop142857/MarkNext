@@ -23,19 +23,19 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
   const identity = computed(() => ({ documentId: "doc-a", revision: revision.value }));
   const session = ref<InstanceType<typeof EditorSession> | null>(null);
   const errors: unknown[] = [];
-  const readyValues: boolean[] = [];
+  const availability: boolean[] = [];
   const host = document.createElement("main"); document.body.appendChild(host);
   const app = createApp({ render: () => h(EditorSession, {
     ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value, generation: 1, documentPath: null, options, checkpoint,
     onDocumentChange: (event: { value: string }) => { markdown.value = event.value; },
     onModeChange: (event: { value: boolean }) => { sourceMode.value = event.value; },
-    onReady: (event: { value: boolean }) => { readyValues.push(event.value); }, onError: error => errors.push(error),
+    onAvailability: (event: { value: boolean }) => { availability.push(event.value); }, onError: error => errors.push(error),
   }) });
   app.mount(host); await nextTick();
   cleanup.push(() => { app.unmount(); stop(); expect(errors).toEqual([]); });
   const source = () => (host.querySelector(".CodeMirror") as HTMLElement & { CodeMirror: CodeMirror.Editor }).CodeMirror;
   const getMuya = () => [...engines].reverse().find(editor => host.contains(editor.domNode)) ?? null;
-  return { session, markdown, sourceMode, revision, host, source, getMuya, readyValues, unmount: () => app.unmount() };
+  return { session, markdown, sourceMode, revision, host, source, getMuya, availability, unmount: () => app.unmount() };
 }
 
 describe("editor session lifecycle", () => {
@@ -119,13 +119,13 @@ describe("editor session lifecycle", () => {
   });
 
   it("reports interaction unavailable while an input composition is active", async () => {
-    const { host, readyValues } = await mount("start");
-    expect(readyValues.at(-1)).toBe(true);
+    const { host, availability } = await mount("start");
+    expect(availability.at(-1)).toBe(true);
     const root = host.querySelector(".mu-editor")!;
     root.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
-    await nextTick(); expect(readyValues.at(-1)).toBe(false);
+    await nextTick(); expect(availability.at(-1)).toBe(false);
     root.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
-    await nextTick(); expect(readyValues.at(-1)).toBe(true);
+    await nextTick(); expect(availability.at(-1)).toBe(true);
   });
 
   it("waits for composition and serializes rapid mode requests without adding an empty source commit", async () => {

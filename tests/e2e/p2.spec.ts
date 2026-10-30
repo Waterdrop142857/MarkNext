@@ -40,6 +40,29 @@ for (const mode of ["wysiwyg", "source"]) {
   });
 }
 
+test("saving with search open does not rerun an unchanged search", async ({ page }) => {
+  await open(page); await replacePanel(page);
+  await page.getByPlaceholder("查找").fill("foo");
+  await page.evaluate(async () => {
+    const modulePath = "/src/muya/index.ts";
+    const { Muya } = await import(/* @vite-ignore */ modulePath);
+    const original = Muya.prototype.search;
+    const counters = window as Window & { searchCalls?: number };
+    counters.searchCalls = 0;
+    Muya.prototype.search = function (...args: unknown[]) {
+      counters.searchCalls = (counters.searchCalls ?? 0) + 1;
+      return original.apply(this, args);
+    };
+  });
+  await page.keyboard.press("Control+S");
+  await expect.poll(() => page.evaluate(() => window.nativeFixture.writes.length)).toBe(1);
+  await expect(page.locator('.document-tabs[aria-busy="true"]')).toHaveCount(0);
+  await page.waitForTimeout(50);
+  expect(await page.evaluate(() => (window as Window & { searchCalls?: number }).searchCalls ?? 0)).toBe(0);
+  await page.getByPlaceholder("查找").fill("bar");
+  await expect.poll(() => page.evaluate(() => (window as Window & { searchCalls?: number }).searchCalls ?? 0)).toBeGreaterThan(0);
+});
+
 test("closing a document clears its search context", async ({ page }) => {
   await open(page); await replacePanel(page); await page.getByPlaceholder("查找").fill("foo"); await page.getByPlaceholder("替换为").fill("X");
   await page.keyboard.press("Control+W"); await expect(page.locator(".empty-state")).toBeVisible();

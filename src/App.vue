@@ -141,12 +141,16 @@ watch([
 const openMenuId = ref<string | null>(null);
 const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[]; tabId?: string } | null>(null);
 const editorReady = ref(false);
+const editorAvailable = ref(false);
 const editorSessionRef = ref<EditorPort | null>(null);
 const editorIdentity = documentTabs.identity;
 const editorCheckpoint = documentTabs.checkpoint;
 
 function onEditorReady(event: EditorEvent<boolean>) {
   if (documentTabs.isCurrentRenderer(event)) editorReady.value = event.value;
+}
+function onEditorAvailability(event: EditorEvent<boolean>) {
+  if (documentTabs.isCurrentRenderer(event)) editorAvailable.value = event.value;
 }
 function flushEditor() { editorSessionRef.value?.flush(); }
 const documentActions = documentTabs.actions;
@@ -220,6 +224,7 @@ const { checkDisk } = useDocumentMonitoring({
 watch(documentGeneration, () => {
   activeHeading.value = null;
   editorReady.value = false;
+  editorAvailable.value = false;
 }, { flush: "sync" });
 
 async function toggleEditorMode() {
@@ -312,20 +317,33 @@ function openSearch(isReplace = false) {
   });
 }
 
+let searchPending = false;
 function closeSearch() {
+  searchPending = false;
   searchOpen.value = false;
   replaceOpen.value = false;
   editorSessionRef.value?.closeSearch();
 }
 
-function runSearch() { editorSessionRef.value?.search(searchQuery.value); }
+function runSearch() {
+  if (!editorAvailable.value) { searchPending = true; return; }
+  searchPending = false;
+  editorSessionRef.value?.search(searchQuery.value);
+}
 function findInDocument(forward = true) { editorSessionRef.value?.find(searchQuery.value, forward); }
 function runReplace() { editorSessionRef.value?.replace(searchQuery.value, replaceQuery.value, false); }
 function runReplaceAll() { editorSessionRef.value?.replace(searchQuery.value, replaceQuery.value, true); }
 
 watch([documentGeneration, isSourceMode, editorReady], async () => {
+  if (!searchOpen.value) return;
+  searchPending = true;
   await nextTick();
-  if (searchOpen.value) runSearch();
+  if (searchOpen.value && editorAvailable.value && searchPending) runSearch();
+});
+watch(editorAvailable, async available => {
+  if (!available || !searchOpen.value || !searchPending) return;
+  await nextTick();
+  if (editorAvailable.value && searchOpen.value && searchPending) runSearch();
 });
 
 function editorContextMenuItems(): FluentMenuItem[] {
@@ -532,8 +550,8 @@ onBeforeUnmount(() => {
           spellcheck="false"
           @keydown.enter="runReplace"
         />
-        <button type="button" :disabled="!searchQuery || !editorReady" @click="runReplace">{{ t('search.replace') }}</button>
-        <button type="button" :disabled="!searchQuery || !editorReady" @click="runReplaceAll">{{ t('search.replaceAll') }}</button>
+        <button type="button" :disabled="!searchQuery || !editorAvailable" @click="runReplace">{{ t('search.replace') }}</button>
+        <button type="button" :disabled="!searchQuery || !editorAvailable" @click="runReplaceAll">{{ t('search.replaceAll') }}</button>
       </div>
     </div>
 
@@ -562,6 +580,7 @@ onBeforeUnmount(() => {
           @mode-change="documentTabs.updateMode"
           @selection-change="documentTabs.updateSelection"
           @ready="onEditorReady"
+          @availability="onEditorAvailability"
           @error="showError(t('error.fileAction'), $event)"
         />
       </main>
