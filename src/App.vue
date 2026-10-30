@@ -469,29 +469,7 @@ function runContextCommand(itemId: string) {
     if (id) void closeTab(id);
     return;
   }
-  switch (itemId) {
-    case "undo":
-      editorUndo();
-      break;
-    case "redo":
-      editorRedo();
-      break;
-    case "cut":
-      document.execCommand("cut");
-      break;
-    case "copy":
-      document.execCommand("copy");
-      break;
-    case "paste":
-      void pasteClipboard();
-      break;
-    case "selectAll":
-      selectAllDocument();
-      break;
-    default:
-      runMenuCommand(itemId);
-      break;
-  }
+  runMenuCommand(itemId);
 }
 
 const handleShortcut = createShortcutHandler({
