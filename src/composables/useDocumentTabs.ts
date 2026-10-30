@@ -2,6 +2,7 @@ import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } 
 import { useWorkspace } from "./useWorkspace";
 import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
 import { useRecovery } from "./useRecovery";
+import { useRecoveryCatalog } from "../workspace/useRecoveryCatalog";
 import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
 import type { DocumentPorts } from "../document/ports";
@@ -49,10 +50,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
   const locked = ref(false);
   let untitledSequence = 0;
   let stopped = false;
-  const archive = ref<RecoverySnapshot[]>([]);
-  const unreadable = ref(0), archiveFailed = ref(false), recoveryReady = ref(false);
-  const retired = new Set<string>();
-  let archiveQueue: Promise<boolean> = Promise.resolve(true);
+  const catalog = useRecoveryCatalog(ports.recovery, () => documents.value.map(tab => tab.id), () => stopped);
   let externalQueue: Promise<boolean> = Promise.resolve(true);
   const idleWaiters = new Set<(ready: boolean) => void>();
 
@@ -107,7 +105,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
     }, { flush: "sync" });
     tab.stop = () => { stopRevision(); stopGeneration(); tab.recovery.stop(); };
     documents.value = [...documents.value, tab];
-    if (recoveryReady.value) void tab.recovery.start({ records: [], unreadable: 0 });
+    if (catalog.ready.value) void tab.recovery.start({ records: [], unreadable: 0 });
     return tab;
   }
 
@@ -176,7 +174,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
       if (!(await activateInternal(next))) { tab.recovery.resume(); await tab.recovery.flush(); return false; }
     }
     documents.value = documents.value.filter(item => item !== tab);
-    retired.add(tab.id); archive.value = archive.value.filter(record => record.id !== tab.id);
+    catalog.retire(tab.id);
     tab.stop();
     return true;
   }
@@ -262,8 +260,8 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
         if (!(await confirmAll(approved))) return false;
         if (!(await prepareExit())) { resumeRecovery(); return false; }
         if (!(await activateInternal(null))) { resumeRecovery(); await flushRecovery(); return false; }
-        documents.value.forEach(tab => { retired.add(tab.id); tab.stop(); });
-        archive.value = archive.value.filter(record => !retired.has(record.id)); documents.value = [];
+        documents.value.forEach(tab => { catalog.retire(tab.id); tab.stop(); });
+        documents.value = [];
         return true;
       }
       if (action === "saveAll") {
@@ -317,15 +315,8 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
   });
 
   async function startRecovery() {
-    try {
-      const listing = await ports.recovery.list();
-      if (stopped) return;
-      archive.value = listing.records.filter(record => !retired.has(record.id) && !documents.value.some(tab => tab.id === record.id));
-      unreadable.value = listing.unreadable; archiveFailed.value = false;
-    }
-    catch { archiveFailed.value = true; }
+    await catalog.start();
     if (stopped) return;
-    recoveryReady.value = true;
     await Promise.all(documents.value.map(tab => tab.recovery.start({ records: [], unreadable: 0 })));
   }
   async function flushRecovery() {
@@ -337,19 +328,6 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
     return results.every(Boolean);
   }
   function resumeRecovery() { documents.value.forEach(tab => tab.recovery.resume()); }
-  function removeRecovery(id: string): Promise<boolean> {
-    if (documents.value.some(tab => tab.id === id)) return Promise.resolve(false);
-    const operation = archiveQueue.then(async () => {
-      try {
-        await ports.recovery.remove(id); retired.add(id);
-        archive.value = archive.value.filter(record => record.id !== id); archiveFailed.value = false;
-        return true;
-      }
-      catch { archiveFailed.value = true; return false; }
-    });
-    archiveQueue = operation;
-    return operation;
-  }
   function stop() {
     stopped = true;
     for (const resolve of idleWaiters) resolve(false);
@@ -387,9 +365,9 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
     close: (id: string) => guard(async () => { const tab = documents.value.find(item => item.id === id); return !!tab && await closeInternal(tab); }),
     actions: { run, restore, reviewExternalChange, isPending: () => busy.value },
     recovery: {
-      records: computed(() => archive.value.filter(record => !documents.value.some(tab => tab.id === record.id))),
-      unreadable, failed: computed(() => archiveFailed.value || documents.value.some(tab => tab.recovery.failed.value)),
-      start: startRecovery, flush: flushRecovery, prepareExit, resume: resumeRecovery, remove: removeRecovery, stop,
+      records: catalog.records,
+      unreadable: catalog.unreadable, failed: computed(() => catalog.failed.value || documents.value.some(tab => tab.recovery.failed.value)),
+      start: startRecovery, flush: flushRecovery, prepareExit, resume: resumeRecovery, remove: catalog.remove, stop,
     },
   };
 }
