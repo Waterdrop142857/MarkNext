@@ -34,6 +34,13 @@ interface DocumentTab {
   recovery: ReturnType<typeof useDocumentRecovery>;
   stop(): void;
 }
+export interface TabSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly path: string | null;
+  readonly dirty: boolean;
+  readonly external: boolean;
+}
 export type TabAction = DocumentAction | "exit" | "saveAll" | "closeAll" | "nextTab" | "previousTab";
 
 export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, host: {
@@ -370,7 +377,7 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
     identity: computed(() => ({ documentId: active.value?.id ?? "empty", revision: active.value?.revision.value ?? 0 })),
     checkpoint: computed(() => { generation.value; return active.value?.checkpoint ?? null; }),
     title: computed(() => active.value ? name(active.value) : t("document.none")),
-    tabs: computed(() => documents.value.map(tab => ({ id: tab.id, title: name(tab), path: tab.workspace.currentFilePath.value,
+    tabs: computed<readonly TabSummary[]>(() => documents.value.map(tab => ({ id: tab.id, title: name(tab), path: tab.workspace.currentFilePath.value,
       dirty: tab.workspace.dirty.value, external: !!tab.workspace.externalChange.value }))),
     activate,
     openPaths,
