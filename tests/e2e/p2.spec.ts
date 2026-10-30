@@ -63,6 +63,27 @@ test("saving with search open does not rerun an unchanged search", async ({ page
   await expect.poll(() => page.evaluate(() => (window as Window & { searchCalls?: number }).searchCalls ?? 0)).toBeGreaterThan(0);
 });
 
+test("closing search during composition clears highlights when the editor is available", async ({ page }) => {
+  await open(page); await replacePanel(page);
+  await page.getByPlaceholder("查找").fill("foo");
+  await page.evaluate(async () => {
+    const modulePath = "/src/muya/index.ts";
+    const { Muya } = await import(/* @vite-ignore */ modulePath);
+    const original = Muya.prototype.search;
+    const state = window as Window & { clearedSearch?: number };
+    state.clearedSearch = 0;
+    Muya.prototype.search = function (...args: unknown[]) {
+      if (args[0] === "") state.clearedSearch = (state.clearedSearch ?? 0) + 1;
+      return original.apply(this, args);
+    };
+  });
+  await page.locator(".mu-editor").dispatchEvent("compositionstart", { data: "测" });
+  await expect(page.getByRole("button", { name: "全部替换", exact: true })).toBeDisabled();
+  await page.locator(".search-close").click();
+  await page.locator(".mu-editor").dispatchEvent("compositionend", { data: "测" });
+  await expect.poll(() => page.evaluate(() => (window as Window & { clearedSearch?: number }).clearedSearch ?? 0)).toBe(1);
+});
+
 test("closing a document clears its search context", async ({ page }) => {
   await open(page); await replacePanel(page); await page.getByPlaceholder("查找").fill("foo"); await page.getByPlaceholder("替换为").fill("X");
   await page.keyboard.press("Control+W"); await expect(page.locator(".empty-state")).toBeVisible();

@@ -304,6 +304,7 @@ function selectAllDocument() {
 function clearEditorContent() { editorSessionRef.value?.clearUndoably(); }
 
 function openSearch(isReplace = false) {
+  searchCleanupPending = false;
   searchOpen.value = true;
   replaceOpen.value = isReplace;
   void nextTick(() => {
@@ -318,11 +319,13 @@ function openSearch(isReplace = false) {
 }
 
 let searchPending = false;
+let searchCleanupPending = false;
 function closeSearch() {
   searchPending = false;
   searchOpen.value = false;
   replaceOpen.value = false;
-  editorSessionRef.value?.closeSearch();
+  searchCleanupPending = !editorAvailable.value;
+  if (!searchCleanupPending) editorSessionRef.value?.closeSearch();
 }
 
 function runSearch() {
@@ -341,8 +344,13 @@ watch([documentGeneration, isSourceMode, editorReady], async () => {
   if (searchOpen.value && editorAvailable.value && searchPending) runSearch();
 });
 watch(editorAvailable, async available => {
-  if (!available || !searchOpen.value || !searchPending) return;
+  if (!available || (!searchCleanupPending && (!searchOpen.value || !searchPending))) return;
   await nextTick();
+  if (editorAvailable.value && searchCleanupPending && !searchOpen.value) {
+    searchCleanupPending = false;
+    editorSessionRef.value?.closeSearch();
+    return;
+  }
   if (editorAvailable.value && searchOpen.value && searchPending) runSearch();
 });
 
