@@ -358,12 +358,12 @@ src-tauri/src/
 pnpm exec vue-tsc --noEmit
 pnpm exec vitest run src/editor/__tests__/editorSession.spec.ts src/editor/__tests__/historyAdapters.spec.ts
 pnpm exec vitest run src/composables/__tests__/documentTabs.spec.ts src/composables/__tests__/nativeFileRequests.spec.ts
-node --test tests/document-actions.test.cjs
+pnpm exec vitest run src/document/__tests__/documentActions.spec.js
 pnpm build
 pnpm exec playwright test tests/e2e/editorSession.spec.ts tests/e2e/documentTabs.spec.ts
 ```
 
-上述是不同范围的示例，不是每个提交都执行一遍。Node 命令仅在旧测试仍存在且受影响时运行；完成 C2 后使用迁移后的 Vitest 路径。Playwright 配置同时启动开发入口和 dist 预览，运行相关浏览器用例前，源码变更后须构建当前 dist，不能拿旧产物验收。`tsconfig.node.json` 检查仅在工具/配置 TS 改动时额外运行。
+上述是不同范围的示例，不是每个提交都执行一遍。文档动作测试已迁入 Vitest，仅在相关功能受影响时运行。Playwright 配置同时启动开发入口和 dist 预览，运行相关浏览器用例前，源码变更后须构建当前 dist，不能拿旧产物验收。`tsconfig.node.json` 检查仅在工具/配置 TS 改动时额外运行。
 
 Rust 模块迁移涉及文件 I/O 与命令入口时，在 src-tauri 运行 `cargo check --locked --offline`，并执行迁移后 document/recovery 等模块的测试过滤；若 run/窗口接线被改动，才纳入 window_instance 和真实启动冒烟。发布打包/图标安装测试仅在相应打包文件变更时运行。
 

@@ -1,6 +1,6 @@
 # 多文件与桌面集成
 
-实现日期：2026-10-29。`useDocumentTabs` 管理会话，`DocumentTabs` 展示标签，`window_instance` 管理唯一主窗口和操作系统的文件打开请求。
+实现日期：2026-10-29。`useDocumentWorkspace` 管理会话，`DocumentTabs` 展示标签，`window_instance` 管理唯一主窗口和操作系统的文件打开请求。
 
 ## 文件与历史
 

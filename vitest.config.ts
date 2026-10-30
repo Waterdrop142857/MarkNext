@@ -3,7 +3,7 @@ import viteConfig from "./vite.config";
 
 export default defineConfig(async environment => mergeConfig(await viteConfig(environment), {
   test: {
-    include: ["src/**/*.spec.ts"],
+    include: ["src/**/*.spec.ts", "src/document/__tests__/documentActions.spec.js"],
     environment: "happy-dom",
     environmentOptions: {
       happyDOM: { settings: { enableJavaScriptEvaluation: false } },

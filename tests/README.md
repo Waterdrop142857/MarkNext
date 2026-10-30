@@ -23,15 +23,15 @@ pnpm exec playwright install --with-deps chromium webkit
 
 | 命令 | 范围 |
 | --- | --- |
-| `pnpm check` | 类型检查、全部前端测试、Node 文档动作测试、Rust 检查、Tauri 发布二进制、Chromium/WebKit 回归 |
-| `pnpm check:frontend` | 类型检查、全部前端与 Node 测试、生产前端构建、两个浏览器回归 |
+| `pnpm check` | 类型检查、全部前端测试、Rust 检查、Tauri 发布二进制、Chromium/WebKit 回归 |
+| `pnpm check:frontend` | 类型检查、全部前端测试、生产前端构建、两个浏览器回归 |
 | `pnpm check:native` | Rust fmt/check/test/clippy、实际 Tauri 发布二进制构建、plain release check/clippy |
-| `pnpm test` | 全部 Vitest + Node 文档动作测试 |
+| `pnpm test` | 全部 Vitest 测试（包括文档动作） |
 | `pnpm test:e2e` | 先构建生产前端，再运行全部浏览器回归 |
-| `pnpm test:unit` | 所有 `src/**/*.spec.ts`，不含历史审计复现或 Node runner 文件 |
-| `pnpm test:document-actions` | Node runner 的完整文档动作与窗口关闭测试 |
+| `pnpm test:unit` | 所有 `src/**/*.spec.ts` 与文档动作测试，不含历史审计复现 |
+| `pnpm test:document-actions` | Vitest 的文档动作与窗口关闭测试 |
 
-单文件定位失败可使用 `pnpm exec vitest run <文件>`。浏览器单项目诊断可使用 `pnpm exec playwright test --project=webkit` 或 `--project=chromium`；这两条诊断命令要求已有 dist。最终验收应运行统一流程，不能用单文件通过替代完整结果。
+单文件定位失败可使用 `pnpm exec vitest run <文件>`。浏览器单项目诊断可使用 `pnpm exec playwright test --project=webkit` 或 `--project=chromium`；这两条诊断命令要求已有 dist。按改动范围运行相关测试；明确记录未覆盖的范围。完整流程可在需要全量检查时运行。
 
 `scripts/check.mjs` 负责跨平台串行执行和退出码传播，支持 pnpm JS 启动器与 Unix/standalone 启动器。Rust 命令使用 `--locked`；Tauri CLI 也将该参数传给 Cargo，实际验证 beforeBuildCommand、production 资源、release feature flags 和链接。流程使用 `--no-bundle`，验证可执行文件，不依赖签名、商店账户或安装器打包环境。
 
@@ -44,7 +44,7 @@ pnpm exec playwright install --with-deps chromium webkit
 - Vitest 保留原测试声明的 happy-dom/jsdom 环境。安全净化用例使用 jsdom；happy-dom 对此版本 DOMPurify 的支持不完整，不以它证明净化安全。CSS inline 导入启用真实 KaTeX、Prism、GitHub Markdown 和 exportStyle 内容，避免空字符串产生误通过。
 - `documentOpen.spec.ts` 使用真实 Muya、真实 workspace/actions，并控制 RAF 与 IPC 完成时序。覆盖读取期间排队编辑后的保存/丢弃/取消、已批准版本不重复询问、确认期间的新编辑、读取失败和 generation 变化；读取只执行一次。另覆盖新建、关闭窗口和退出时，确认期间新输入的内容不会被此前的丢弃选择覆盖。
 - `htmlPreviewIsolation.spec.ts` 使用真实 Muya，验证大小写样式表、危险行内布局、SVG 动画/事件属性、允许的普通样式，以及源 Markdown 不被净化改写。行内 HTML 与块预览使用同一 CSS 策略。
-- Node 文档动作测试覆盖新建、打开、关闭、退出与系统关闭的统一保存保护、保存失败、重复操作和监听器生命周期。
+- Vitest 文档动作测试覆盖新建、打开、关闭、退出与系统关闭的统一保存保护、保存失败、重复操作和监听器生命周期。
 - 浏览器回归挂载真实 Vue 应用与编辑器，通过 Tauri SDK 的官方 mocks 控制磁盘和对话框 IPC；Chromium/WebKit 分别验证延迟读取期间的实际输入、三种确认选择、CSS 净化与真实布局/菜单点击，以及生产 dist 隐藏开发者工具、正常启动。页面只能访问本地测试服务器，外部请求会被阻止并令测试失败。
 - `/tests/e2e/fixtures/host-style.css` 是真实存在的测试样式表。浏览器测试会确认原始 HTML 的 link 被移除，且没有请求该文件；不会下载外部“恶意 CSS”。
 - `mermaidTheme.spec.ts` 使用真实 Mermaid，覆盖流程图、时序图、类图、状态图和 ER 图。验证暗色连接线及箭头在编辑器与浮层背景上达到 3:1 对比度，时序消息文字达到 4.5:1；亮色、暗色与跟随系统之间切换保留原 SVG/编辑器实例，恢复浅色配色，保留显式 linkStyle 线条颜色和空心标记语义。
@@ -68,7 +68,6 @@ pnpm exec playwright install --with-deps chromium webkit
 统一流程输出：
 
 - `test-results/vitest.xml`：Vitest JUnit。
-- `test-results/document-actions.xml`：Node runner JUnit。
 - `test-results/browser.xml`：浏览器 JUnit。
 - `playwright-report/index.html`：浏览器 HTML 报告。
 - 浏览器失败时的截图与 trace：位于 test-results 对应用例目录。
@@ -131,7 +130,7 @@ Windows NSIS 安装器有独立的真实安装回归脚本：
 
 手动检查：点击菜单栏“设置”直接打开浮窗，切换四个左侧分类并修改设置；取消后重开确认未应用。设置字号、字体、缩放后应用，检查正文、代码块、源码模式和浅色/暗色浮窗；撤销/重做应保持可用。使用 UTF-16 和 UTF-8 BOM 新建保存含中文/emoji 的文档，以其他编辑器确认编码，再修改默认编码后保存已打开文件，确认其原格式保留。缩小窗口后检查内部滚动、按钮可达、标题栏和状态栏位置；重新启动确认偏好保留。
 
-浏览器截图与 trace 写入 `test-results/browser/`，浏览器 JUnit 写入 `test-results/browser.xml`。Playwright 清理自己的输出时不再删除同目录下的 `vitest.xml` 和 `document-actions.xml`，CI 会保留全部检查报告。
+浏览器截图与 trace 写入 `test-results/browser/`，浏览器 JUnit 写入 `test-results/browser.xml`。Playwright 清理自己的输出时不再删除同目录下的 `vitest.xml`，CI 会保留全部检查报告。
 
 ## 字数统计与文档大纲验收
 

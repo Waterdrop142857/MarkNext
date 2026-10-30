@@ -1,43 +1,24 @@
-const { test } = require('node:test');
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const ts = require('typescript');
-const vue = require('vue');
+import { test, vi } from "vitest";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { i18n } from "../../i18n";
+import { createDocumentController } from "../createDocumentController";
+import { useDocumentActions } from "../useDocumentActions";
+import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
+import { useWindowChrome } from "../../composables/useWindowChrome";
 
-const root = path.resolve(__dirname, '..');
+const native = vi.hoisted(() => ({ dialog: null, invoke: null, getWindow: null, onUnmount: null }));
+vi.mock("vue", async importOriginal => ({ ...await importOriginal(), onBeforeUnmount: callback => native.onUnmount(callback) }));
+vi.mock("@tauri-apps/plugin-dialog", () => ({
+  open: (...args) => native.dialog.open(...args), save: (...args) => native.dialog.save(...args),
+  message: (...args) => native.dialog.message(...args),
+}));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args) => native.invoke(...args) }));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => native.getWindow() }));
 
-// Exercise the production TypeScript with mocked native APIs, without a WebView.
-function loadModule(file, dependencies) {
-  const exports = {};
-  const source = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  vm.runInNewContext(source, {
-    exports,
-    console: { error() {} },
-    require(name) {
-      if (name === '../i18n') return translations;
-      if (name === '../config/preferences') return preferenceConfig;
-      if (name === '../document/types' || name === './types') return documentTypes;
-      if (name === '../document/useDocumentState' || name === './useDocumentState') return documentState;
-      if (name === '../services/documentSafety') return documentSafety;
-      assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
-      return dependencies[name];
-    },
-  }, { filename: file });
-  return exports;
-}
-
-const catalogEn = loadModule('src/i18n/en.ts', {});
-const catalogZh = loadModule('src/i18n/zh-CN.ts', {});
-const documentTypes = loadModule('src/document/types.ts', {});
-const preferenceConfig = loadModule('src/config/preferences.ts', {});
-const documentSafety = loadModule('src/services/documentSafety.ts', {});
-const documentState = loadModule('src/document/useDocumentState.ts', { vue });
-const translations = loadModule('src/i18n/index.ts', { vue, './en': catalogEn, './zh-CN': catalogZh, '../config/preferences': preferenceConfig });
-translations.i18n.setLocale('zh-CN');
+const root = process.cwd();
+i18n.setLocale("zh-CN");
 
 function harness(choices = ['不保存'], options = {}) {
   const disk = new Map([['/old.md', 'saved'], ['/new.md', 'next document']]);
@@ -62,8 +43,8 @@ function harness(choices = ['不保存'], options = {}) {
       return choices.shift();
     },
   };
-  const dialogs = loadModule('src/services/dialogs.ts', { '@tauri-apps/plugin-dialog': dialog });
-  const native = { async invoke(command, args) {
+  native.dialog = dialog;
+  native.invoke = async (command, args) => {
     if (command === 'read_file') return { content: disk.get(args.path), encoding: 'utf-8', bom: false, version: disk.get(args.path) };
     if (command === 'file_version') return disk.get(args.path) ?? 'missing';
     assert.equal(command, 'write_file');
@@ -71,41 +52,28 @@ function harness(choices = ['不保存'], options = {}) {
     disk.set(args.path, args.content);
     options.afterWrite?.(workspace);
     return args.content;
-  } };
-  const { createTauriDocumentPorts } = loadModule('src/platform/tauri/documentPorts.ts', {
-    '@tauri-apps/api/core': native, '@tauri-apps/plugin-dialog': dialog,
-    '../../i18n': translations, '../../services/dialogs': dialogs,
-  });
+  };
   const ports = createTauriDocumentPorts();
-  const { createDocumentController } = loadModule('src/document/createDocumentController.ts', { vue });
   workspace = createDocumentController(() => 'utf-8', ports);
   workspace.currentFilePath.value = '/old.md';
   workspace.savedMarkdown.value = 'saved';
   workspace.markdown.value = 'edited';
 
-  const { useWindowChrome } = loadModule('src/composables/useWindowChrome.ts', {
-    vue: { ref: vue.ref, onBeforeUnmount: callback => unmount.push(callback) },
-    '../services/dialogs': dialogs,
-    '@tauri-apps/api/window': {
-      getCurrentWindow: () => ({
-        async destroy() {
-          if (options.failClose) throw new Error('simulated permission denial');
-          destroyed++;
-        },
-        async onCloseRequested(callback) {
-          closeHandler = callback;
-          await options.registration;
-          return () => unlistened++;
-        },
-        isMaximized: async () => false,
-        onResized: async () => () => unlistened++,
-      }),
+  native.onUnmount = callback => unmount.push(callback);
+  native.getWindow = () => ({
+    async destroy() {
+      if (options.failClose) throw new Error('simulated permission denial');
+      destroyed++;
     },
+    async onCloseRequested(callback) {
+      closeHandler = callback;
+      await options.registration;
+      return () => unlistened++;
+    },
+    isMaximized: async () => false,
+    onResized: async () => () => unlistened++,
   });
   const chrome = useWindowChrome();
-  const { useDocumentActions } = loadModule('src/document/useDocumentActions.ts', {
-    '../services/dialogs': dialogs,
-  });
   const documentActions = useDocumentActions(workspace, ports.prompts, {
     flushEditor: () => options.flush?.(workspace),
   });

@@ -40,11 +40,6 @@ try {
   if (mode !== "--native") {
     await pnpm("TypeScript and Vue type checking", ["typecheck"]);
     await pnpm("All Vitest regression tests", ["test:unit"]);
-    await run("Document lifecycle and native window contract", process.execPath, [
-      "--test", "--test-reporter=spec", "--test-reporter=junit",
-      "--test-reporter-destination=stdout", "--test-reporter-destination=test-results/document-actions.xml",
-      "tests/document-actions.test.cjs",
-    ]);
   }
   if (mode !== "--frontend") {
     await cargo(["fmt", "--all", "--", "--check"]);
