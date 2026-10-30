@@ -60,12 +60,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            document::read_file,
-            document::canonical_document_path,
+            document::commands::read_file,
+            document::commands::canonical_document_path,
             document::images::allow_image_file,
-            document::write_file,
-            document::file_version,
-            document::file_status,
+            document::commands::write_file,
+            document::commands::file_version,
+            document::commands::file_status,
             recovery::recovery_list,
             recovery::recovery_write,
             recovery::recovery_remove,
