@@ -1,25 +1,15 @@
-import { computed, ref } from "vue";
-import { defaultFileFormat, type FileEncoding, type FileFormat } from "../document/types";
+import { defaultFileFormat, type FileEncoding } from "../document/types";
 import { conflictVersion, newDocumentId } from "../services/documentSafety";
 import type { ExternalChange, RecoverySnapshot } from "../document/types";
 import type { DocumentPorts } from "../document/ports";
+import { useDocumentState } from "../document/useDocumentState";
 
 export function useWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, options: {
   resolveSavePath?: (path: string) => Promise<string | null>;
 } = {}) {
-  const markdown = ref("");
-  const currentFilePath = ref<string | null>(null);
-  const savedMarkdown = ref("");
-  const isUntitled = ref(false);
-  const isSourceMode = ref(false);
-  const selection = ref<unknown>(null);
-  const documentGeneration = ref(0);
-  const fileFormat = ref<FileFormat | null>(null);
-  const documentId = ref(newDocumentId());
-  const diskVersion = ref("missing");
-  const externalChange = ref<ExternalChange | null>(null);
-  const recoveredCopy = ref(false);
-  const recoveryNeedsSave = ref(false);
+  const { markdown, currentFilePath, savedMarkdown, isUntitled, isSourceMode, selection,
+    documentGeneration, fileFormat, documentId, diskVersion, externalChange, recoveredCopy,
+    recoveryNeedsSave, dirty, resetIdentity } = useDocumentState();
   const savedVersions = new Map<string, string>();
   let writing = 0;
   let checkedDisk: { generation: number; path: string; baseline: string; stamp: string; version: string } | null = null;
@@ -29,15 +19,9 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding, ports: Docu
     if (externalChange.value?.kind !== value?.kind || externalChange.value?.version !== value?.version) externalChange.value = value;
   }
 
-  // Content changes need protection regardless of path or document label.
-  const dirty = computed(() => recoveryNeedsSave.value || markdown.value !== savedMarkdown.value);
-
   function resetSession() {
     checkedDisk = null;
-    documentId.value = newDocumentId();
-    diskVersion.value = "missing";
-    externalChange.value = null;
-    recoveredCopy.value = recoveryNeedsSave.value = false;
+    resetIdentity();
   }
 
   async function replaceFromDisk(selected: string, beforeReplace?: () => Promise<boolean>, flushEditor?: () => void, reload = false): Promise<boolean> {
