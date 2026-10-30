@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { useWorkspace } from "../useWorkspace";
 import { useDocumentActions } from "../useDocumentActions";
-import { useRecovery } from "../useRecovery";
+import { useDocumentRecovery } from "../../workspace/useDocumentRecovery";
 import type { RecoverySnapshot } from "../../document/types";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), save: vi.fn(), message: vi.fn() }));
@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: native.open, save: native.sa
 let disk: Map<string, string>;
 let records: Map<string, RecoverySnapshot>;
 let failBackup = false;
-const managers: ReturnType<typeof useRecovery>[] = [];
+const managers: ReturnType<typeof useDocumentRecovery>[] = [];
 const version = (path: string) => disk.has(path) ? `v:${disk.get(path)}` : "missing";
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -46,7 +46,7 @@ function actions(workspace: ReturnType<typeof useWorkspace>) {
   return useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: () => {}, closeWindow: async () => {} });
 }
 function manager(workspace: ReturnType<typeof useWorkspace>) {
-  const value = useRecovery(workspace, createTauriDocumentPorts().recovery, { flushEditor: () => {}, getView: () => ({ scrollTop: 123 }) });
+  const value = useDocumentRecovery(workspace, createTauriDocumentPorts().recovery, { flushEditor: () => {}, getView: () => ({ scrollTop: 123 }) });
   managers.push(value); return value;
 }
 function record(): RecoverySnapshot {

@@ -6,7 +6,7 @@ import { defaultFileFormat } from "../document/types";
 
 // One write queue orders backups and deletions across document switches. Never
 // send a mutable workspace object to an asynchronous write.
-export function useRecovery(workspace: RecoverySource, store: RecoveryStore, options: {
+export function useDocumentRecovery(workspace: RecoverySource, store: RecoveryStore, options: {
   flushEditor: () => void;
   getView?: () => RecoveryView | undefined;
 }) {

@@ -1,7 +1,7 @@
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { useWorkspace } from "./useWorkspace";
 import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
-import { useRecovery } from "./useRecovery";
+import { useDocumentRecovery } from "../workspace/useDocumentRecovery";
 import { useRecoveryCatalog } from "../workspace/useRecoveryCatalog";
 import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
@@ -31,7 +31,7 @@ export interface DocumentTab {
   checkpoint: EditorSessionCheckpoint | null;
   view?: RecoveryView;
   actions: ReturnType<typeof useDocumentActions>;
-  recovery: ReturnType<typeof useRecovery>;
+  recovery: ReturnType<typeof useDocumentRecovery>;
   stop(): void;
 }
 export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "previousTab";
@@ -93,7 +93,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
       flushEditor, documentName: () => name(tab),
       closeWindow: async () => { throw new Error("Window close belongs to the tab manager"); },
     });
-    tab.recovery = useRecovery(workspace, ports.recovery, {
+    tab.recovery = useDocumentRecovery(workspace, ports.recovery, {
       flushEditor,
       getView: () => active.value === tab && !tab.checkpoint ? host.getView() : tab.view,
     });
