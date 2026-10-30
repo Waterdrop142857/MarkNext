@@ -19,7 +19,8 @@ marked logo section, keeping the embedded logo standalone and up to date.
 
 The SVGs are used by the browser favicon, titlebar and Markdown/untitled tabs.
 Tauri's configured application icons supply the window and installer icons.
-The standalone Markdown exports are available for file-type icon integration;
-the installed Tauri `FileAssociation` configuration does not expose a separate
-document-icon field. This change does not override system MIME icon themes or
-change the user's default file associations.
+The Windows NSIS installer optionally registers MarkNext in Open With and copies
+`markdown.ico` for its document ProgIDs, separately from the application icon.
+See `../windows/README.md` for registration, upgrade and uninstall behavior.
+Other installers still use Tauri's file-association defaults, which do not expose
+a separate document-icon field. System MIME icon themes are not overridden.

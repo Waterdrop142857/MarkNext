@@ -94,6 +94,8 @@ git push origin v0.1.0
 
 多文件标签页支持独立编辑模式、撤销历史、选区和滚动位置；后台标签销毁编辑器，仅保存文档与历史检查点。新建和打开增加标签，关闭时统一询问未保存修改。打开同一规范路径会切换已有标签。桌面应用保持单窗口，从文件管理器再次打开文件会聚焦已有窗口并增加/激活标签；文件关联需安装新构建的安装包。详细行为与验收见 [多文件与桌面集成](docs/multi-file.md)。
 
+Windows NSIS 安装器可勾选“添加到打开方式”，支持 `.md`、`.markdown`、`.txt`，升级保留选择。该选项保留当前默认程序；之后在 Windows 中将 MarkNext 设为 Markdown 默认程序时，文件使用独立文件图标。详见 [NSIS 安装与关联说明](src-tauri/windows/README.md)。
+
 默认键位：新建 `Ctrl+N`、打开 `Ctrl+O`、保存 `Ctrl+S`、另存为 `Ctrl+Shift+S`、关闭文件 `Ctrl+W`、退出 `Ctrl+Q`。
 撤销 `Ctrl+Z`，重做 `Ctrl+Y` 或 `Ctrl+Shift+Z`，查找 `Ctrl+F`，替换 `Ctrl+H`，下一个/上一个匹配 `F3` / `Shift+F3`，切换源码模式 `Ctrl+Shift+M`。
 macOS 使用 `Cmd` 替代 `Ctrl`，重做为 `Cmd+Shift+Z`。

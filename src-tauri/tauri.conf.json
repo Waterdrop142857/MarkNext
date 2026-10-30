@@ -64,6 +64,13 @@
         "description": "Text document"
       }
     ],
+    "windows": {
+      "nsis": {
+        "template": "windows/installer.nsi",
+        "installerHooks": "windows/open-with.nsh",
+        "languages": ["English", "SimpChinese"]
+      }
+    },
     "linux": {
       "deb": {
         "desktopTemplate": "templates/marknext.desktop"

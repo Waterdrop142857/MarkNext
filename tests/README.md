@@ -91,6 +91,11 @@ MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、
 
 ## 覆盖边界
 
+Windows NSIS 安装器有独立的真实安装回归脚本：
+`pwsh -NoProfile -File scripts/test-windows-installer.ps1 -Installer <setup.exe>`。
+必须在无 MarkNext 安装的一次性 Windows 用户账户或虚拟机中运行，具体范围见
+[NSIS 说明](../src-tauri/windows/README.md)。此脚本按需执行，不加入质量检测 Action。
+
 浏览器模拟的是 Tauri IPC，不是 OS 的真实对话框。原生矩阵验证编译、Rust 单元测试和发布二进制链接；不宣称已经自动验证所有操作系统窗口行为、安装器、签名或整库覆盖率。实际 WebKitGTK 窗口、系统剪贴板权限和安装包交互仍需要对应平台验收。
 
 ## P2 与窗口布局的手动验收
