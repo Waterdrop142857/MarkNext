@@ -335,9 +335,8 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
   }
   onScopeDispose(stop);
 
-  function bind<T>(select: (workspace: Workspace) => Ref<T>, fallback: T) {
-    return computed({ get: () => active.value ? select(active.value.workspace).value : fallback,
-      set: value => { if (active.value) select(active.value.workspace).value = value; } });
+  function bind<T>(select: (workspace: Workspace) => Readonly<Ref<T>>, fallback: T) {
+    return computed(() => active.value ? select(active.value.workspace).value : fallback);
   }
   const workspace = {
     markdown: bind(ws => ws.markdown, ""),
@@ -346,7 +345,7 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
     isSourceMode: bind(ws => ws.isSourceMode, false),
     selection: bind(ws => ws.selection, null),
     dirty: computed(() => active.value?.workspace.dirty.value ?? false),
-    documentGeneration: generation,
+    documentGeneration: computed(() => generation.value),
     documentId: computed(() => active.value?.id ?? "empty"),
     externalChange: computed(() => active.value?.workspace.externalChange.value ?? null),
     recoveredCopy: computed(() => active.value?.workspace.recoveredCopy.value ?? false),
@@ -366,7 +365,8 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
   }
   return {
     isCurrentRenderer, updateMarkdown, updateMode, updateSelection,
-    workspace, activeId: computed(() => active.value?.id ?? null), busy, locked,
+    workspace, activeId: computed(() => active.value?.id ?? null),
+    busy: computed(() => busy.value), locked: computed(() => locked.value),
     identity: computed(() => ({ documentId: active.value?.id ?? "empty", revision: active.value?.revision.value ?? 0 })),
     checkpoint: computed(() => { generation.value; return active.value?.checkpoint ?? null; }),
     title: computed(() => active.value ? name(active.value) : t("document.none")),

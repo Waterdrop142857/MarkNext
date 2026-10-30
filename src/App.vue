@@ -178,7 +178,9 @@ async function reloadDocument(reviewExternal = false) {
   const generation = documentGeneration.value;
   const done = reviewExternal ? await documentActions.reviewExternalChange() : await documentActions.run("reload");
   if (!done || documentGeneration.value !== generation + 1) return;
-  if (sourceMode) isSourceMode.value = true;
+  if (sourceMode) documentTabs.updateMode({
+    documentId: documentTabs.identity.value.documentId, generation: documentGeneration.value, value: true,
+  });
   await nextTick();
   if (documentGeneration.value === generation + 1) applyView(view, sourceMode);
 }

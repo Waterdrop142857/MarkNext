@@ -37,6 +37,13 @@ beforeEach(() => {
 });
 afterEach(() => { cleanups.splice(0).reverse().forEach(cleanup => cleanup()); vi.restoreAllMocks(); });
 
+function updateText(manager: ReturnType<typeof useDocumentWorkspace>, value: string) {
+  manager.updateMarkdown({ documentId: manager.activeId.value!, generation: manager.workspace.documentGeneration.value, value });
+}
+function updateMode(manager: ReturnType<typeof useDocumentWorkspace>, value: boolean) {
+  manager.updateMode({ documentId: manager.activeId.value!, generation: manager.workspace.documentGeneration.value, value });
+}
+
 function mount(prepareEditor?: () => Promise<void>) {
   const scope = effectScope();
   let manager!: ReturnType<typeof useDocumentWorkspace>;
@@ -70,7 +77,7 @@ function mount(prepareEditor?: () => Promise<void>) {
   }))!;
   cleanups.push(() => scope.stop());
   return { manager, mounted, suspended, captures, failMount, closed: () => closed, stop: () => scope.stop(),
-    async edit(id: string, text: string) { expect(await manager.activate(id)).toBe(true); manager.workspace.markdown.value = text; },
+    async edit(id: string, text: string) { expect(await manager.activate(id)).toBe(true); updateText(manager, text); },
     async read(id: string) { expect(await manager.activate(id)).toBe(true); return { text: manager.workspace.markdown.value, dirty: manager.workspace.dirty.value }; },
   };
 }
@@ -111,7 +118,7 @@ describe("multi-document workspaces", () => {
   it("creates tabs without replacing dirty content, preserving identity, mode and pure checkpoints", async () => {
     const { manager, suspended, captures } = mount();
     expect(await manager.actions.run("new")).toBe(true);
-    const first = { id: manager.activeId.value! }; manager.workspace.markdown.value = "unsaved"; manager.workspace.isSourceMode.value = true;
+    const first = { id: manager.activeId.value! }; updateText(manager, "unsaved"); updateMode(manager, true);
     expect(await manager.actions.run("new")).toBe(true);
     expect(manager.tabs.value).toHaveLength(2); expect(native.message).not.toHaveBeenCalled();
     expect(captures.get(first.id)?.active.documentId).toBe(first.id);
@@ -157,7 +164,7 @@ describe("multi-document workspaces", () => {
   });
 
   it("rejects Save As into another open file, including aliases", async () => {
-    const { manager, first, read } = await two(); manager.workspace.markdown.value = "my edits";
+    const { manager, first, read } = await two(); updateText(manager, "my edits");
     aliases.set("/alias.md", "/one.md"); native.save.mockResolvedValue("/alias.md");
     expect(await manager.actions.run("saveAs")).toBe(false);
     expect(disk.get("/one.md")).toBe("one"); expect(manager.workspace.currentFilePath.value).toBe("/two.md");
@@ -246,14 +253,14 @@ describe("multi-document workspaces", () => {
       ? new Promise(resolve => { finish = () => resolve({ content: "three", version: "v:three", encoding: "utf-8", bom: false }); }) : implementation(command, args));
     native.open.mockResolvedValue("/three.md");
     const opening = manager.actions.run("open"); await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-    manager.workspace.markdown.value = "edit during read"; finish();
+    updateText(manager, "edit during read"); finish();
     expect(await opening).toBe(true); expect(manager.tabs.value.find(tab => tab.id === first.id)?.dirty).toBe(true); expect(native.message).not.toHaveBeenCalled();
     expect(await manager.activate(first.id)).toBe(true); expect(manager.workspace.markdown.value).toBe("edit during read");
   });
 
   it("rolls back activation when a target renderer fails to mount", async () => {
     const { manager, failMount } = mount(); await manager.actions.run("open"); const first = manager.activeId.value!;
-    manager.workspace.markdown.value = "first draft";
+    updateText(manager, "first draft");
     native.open.mockResolvedValue("/two.md"); failMount.add("/two.md");
     expect(await manager.actions.run("open")).toBe(false);
     expect(manager.activeId.value).toBe(first); expect(manager.workspace.markdown.value).toBe("first draft");
