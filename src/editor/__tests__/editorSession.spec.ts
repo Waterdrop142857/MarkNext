@@ -25,9 +25,9 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
   const errors: unknown[] = [];
   const host = document.createElement("main"); document.body.appendChild(host);
   const app = createApp({ render: () => h(EditorSession, {
-    ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value, documentPath: null, options, checkpoint,
-    "onUpdate:modelValue": value => { markdown.value = value; },
-    "onUpdate:sourceMode": value => { sourceMode.value = value; }, onError: error => errors.push(error),
+    ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value, generation: 1, documentPath: null, options, checkpoint,
+    onDocumentChange: (event: { value: string }) => { markdown.value = event.value; },
+    onModeChange: (event: { value: boolean }) => { sourceMode.value = event.value; }, onError: error => errors.push(error),
   }) });
   app.mount(host); await nextTick();
   cleanup.push(() => { app.unmount(); stop(); expect(errors).toEqual([]); });

@@ -2,6 +2,13 @@ import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
 import type { EditorSessionCheckpoint } from "./sessionTypes";
 
+/** Identifies the renderer generation that originated an event. */
+export interface EditorEvent<T> {
+  readonly documentId: string;
+  readonly generation: number;
+  readonly value: T;
+}
+
 /** Presentation options shared with the application, independent of Muya. */
 export interface EditorAppearance {
   fontSize: number;

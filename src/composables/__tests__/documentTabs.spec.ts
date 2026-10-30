@@ -122,6 +122,29 @@ describe("multi-document workspaces", () => {
     expect(manager.tabs.value.map(tab => tab.title)).toEqual(["未命名 1", "未命名 2"]);
   });
 
+  it("ignores editor events from an earlier document or renderer generation", async () => {
+    const { manager } = mount();
+    expect(await manager.actions.run("new")).toBe(true);
+    const first = manager.activeId.value!, generation = manager.workspace.documentGeneration.value;
+    manager.updateMarkdown({ documentId: first, generation, value: "first draft" });
+    expect(manager.workspace.markdown.value).toBe("first draft");
+    expect(await manager.actions.run("new")).toBe(true);
+    const second = manager.activeId.value!;
+    manager.updateMarkdown({ documentId: first, generation, value: "stale text" });
+    manager.updateMode({ documentId: first, generation, value: true });
+    manager.updateSelection({ documentId: first, generation, value: true });
+    expect(manager.workspace.markdown.value).toBe("");
+    expect(manager.workspace.isSourceMode.value).toBe(false);
+    expect(manager.workspace.selection.value).toBe(null);
+    expect(await manager.activate(first)).toBe(true);
+    manager.updateMarkdown({ documentId: first, generation, value: "stale same document" });
+    expect(manager.workspace.markdown.value).toBe("first draft");
+    const activeGeneration = manager.workspace.documentGeneration.value;
+    manager.updateMarkdown({ documentId: first, generation: activeGeneration, value: "current text" });
+    expect(manager.workspace.markdown.value).toBe("current text");
+    expect(manager.activeId.value).not.toBe(second);
+  });
+
   it("opens several files and canonical aliases only once", async () => {
     const { manager } = mount(); aliases.set("/alias.md", "/one.md");
     native.open.mockResolvedValue(["/one.md", "/alias.md", "/two.md"]);

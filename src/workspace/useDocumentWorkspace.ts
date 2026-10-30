@@ -7,7 +7,7 @@ import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
 import type { DocumentPorts } from "../document/ports";
 import type { EditorSessionCheckpoint } from "../editor/sessionTypes";
-import type { EditorLifecyclePort } from "../editor/editorPort";
+import type { EditorEvent, EditorLifecyclePort } from "../editor/editorPort";
 import type { RecoverySnapshot, RecoveryView } from "../document/types";
 import { t } from "../i18n";
 
@@ -352,7 +352,20 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
     recoveredCopy: computed(() => active.value?.workspace.recoveredCopy.value ?? false),
     checkExternalChange,
   };
+  function isCurrentRenderer(event: Pick<EditorEvent<unknown>, "documentId" | "generation">): boolean {
+    return !stopped && active.value?.id === event.documentId && generation.value === event.generation;
+  }
+  function updateMarkdown(event: EditorEvent<string>): void {
+    if (isCurrentRenderer(event) && active.value) active.value.workspace.markdown.value = event.value;
+  }
+  function updateMode(event: EditorEvent<boolean>): void {
+    if (isCurrentRenderer(event) && active.value) active.value.workspace.isSourceMode.value = event.value;
+  }
+  function updateSelection(event: EditorEvent<boolean>): void {
+    if (isCurrentRenderer(event) && active.value) active.value.workspace.selection.value = event.value;
+  }
   return {
+    isCurrentRenderer, updateMarkdown, updateMode, updateSelection,
     workspace, activeId: computed(() => active.value?.id ?? null), busy, locked,
     identity: computed(() => ({ documentId: active.value?.id ?? "empty", revision: active.value?.revision.value ?? 0 })),
     checkpoint: computed(() => { generation.value; return active.value?.checkpoint ?? null; }),

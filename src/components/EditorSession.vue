@@ -5,7 +5,7 @@ import SourceEditor from "./SourceEditor.vue";
 import "../styles/muya-editor.css";
 import "../styles/source-editor.css";
 import type { Muya } from "../muya";
-import type { EditorAppearance } from "../editor/editorPort";
+import type { EditorAppearance, EditorEvent } from "../editor/editorPort";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { DocumentRevision, EditorSessionCheckpoint, MuyaCheckpoint, SourceCheckpoint } from "../editor/sessionTypes";
 import { cloneData, decodeSessionCheckpoint, freezeData, matchesRevision } from "../editor/checkpointCodec";
@@ -17,15 +17,16 @@ const props = defineProps<{
   modelValue: string;
   sourceMode: boolean;
   identity: DocumentRevision;
+  generation: number;
   documentPath: string | null;
   options: Partial<EditorAppearance>;
   checkpoint?: EditorSessionCheckpoint | null;
 }>();
 const emit = defineEmits<{
-  (event: "update:modelValue", value: string): void;
-  (event: "update:sourceMode", value: boolean): void;
-  (event: "ready", value: boolean): void;
-  (event: "selection-change", value: boolean): void;
+  (event: "document-change", value: EditorEvent<string>): void;
+  (event: "mode-change", value: EditorEvent<boolean>): void;
+  (event: "ready", value: EditorEvent<boolean>): void;
+  (event: "selection-change", value: EditorEvent<boolean>): void;
   (event: "error", error: unknown): void;
 }>();
 
@@ -50,9 +51,12 @@ let transitioning = false;
 const waiting = new Set<(ready: boolean) => void>();
 const taskWaiting = new Set<(ready: boolean) => void>();
 
+function editorEvent<T>(value: T): EditorEvent<T> {
+  return { documentId: props.identity.documentId, generation: props.generation, value };
+}
 function onReady(value: Muya) { muya.value = value; }
 const ready = computed(() => !suspended.value && (props.sourceMode ? !!sourceRef.value : !!muya.value));
-watch(ready, value => emit("ready", value), { immediate: true });
+watch(ready, value => emit("ready", editorEvent(value)), { immediate: true });
 function failed(error: unknown) { restoreError = error; emit("error", error); }
 function compositionEnd() {
   composing = false;
@@ -144,7 +148,7 @@ async function resume(): Promise<boolean> {
     if (!matchesRevision(snapshot.active, props.identity)) return false;
     restoreError = null;
     activation.value++;
-    emit("update:sourceMode", snapshot.mode === "source");
+    emit("mode-change", editorEvent(snapshot.mode === "source"));
     if (snapshot.mode === "source") {
       bridge = snapshot.bridge.muyaAtEntry;
       sourceTextAtEntry = snapshot.bridge.sourceTextAtEntry;
@@ -192,7 +196,7 @@ async function toggleMode(): Promise<boolean> {
         bridge = null;
         return false;
       }
-      emit("update:sourceMode", true);
+      emit("mode-change", editorEvent(true));
       await nextTick();
       if (disposed) return false;
       sourceRef.value?.focus();
@@ -219,7 +223,7 @@ async function toggleMode(): Promise<boolean> {
       catch (error) { failed(error); return false; }
     }
     bridge = null;
-    emit("update:sourceMode", false);
+    emit("mode-change", editorEvent(false));
     await nextTick();
     if (disposed) return false;
     editor.focus();
@@ -372,12 +376,12 @@ defineExpose({
     <MuyaEditor v-if="muyaMounted" ref="muyaRef" :key="activation" :options="options" :identity="identity" :lease="lease"
       :checkpoint="muyaCheckpoint" :document-path="documentPath" :model-value="modelValue"
       :active="!sourceMode && !suspended" :aria-hidden="sourceMode || !!suspended" :inert="sourceMode || !!suspended"
-      @update:model-value="emit('update:modelValue', $event)" @ready="onReady" @restore-error="failed"
-      @selection-change="emit('selection-change', !!$event)" />
+      @update:model-value="emit('document-change', editorEvent($event))" @ready="onReady" @restore-error="failed"
+      @selection-change="emit('selection-change', editorEvent(!!$event))" />
     <SourceEditor v-if="sourceMounted" v-show="sourceMode && !suspended" ref="sourceRef" :key="activation"
       :identity="identity" :lease="lease" :checkpoint="sourceCheckpoint" :model-value="modelValue"
       :active="sourceMode && !suspended" :aria-hidden="!sourceMode || !!suspended" :inert="!sourceMode || !!suspended"
-      @update:model-value="emit('update:modelValue', $event)" @restore-error="failed" />
+      @update:model-value="emit('document-change', editorEvent($event))" @restore-error="failed" />
   </div>
 </template>
 

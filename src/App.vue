@@ -13,7 +13,7 @@ import { fontStack, type Preferences, type SettingsCategory } from "./config/pre
 import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/shortcuts";
 import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
-import type { EditorAppearance, EditorPort } from "./editor/editorPort";
+import type { EditorAppearance, EditorEvent, EditorPort } from "./editor/editorPort";
 import { useDocumentWorkspace, type TabAction } from "./workspace/useDocumentWorkspace";
 import { createTauriDocumentPorts } from "./platform/tauri/documentPorts";
 import { useNativeFileRequests } from "./composables/useNativeFileRequests";
@@ -145,6 +145,9 @@ const editorSessionRef = ref<EditorPort | null>(null);
 const editorIdentity = documentTabs.identity;
 const editorCheckpoint = documentTabs.checkpoint;
 
+function onEditorReady(event: EditorEvent<boolean>) {
+  if (documentTabs.isCurrentRenderer(event)) editorReady.value = event.value;
+}
 function flushEditor() { editorSessionRef.value?.flush(); }
 const documentActions = documentTabs.actions;
 const recovery = documentTabs.recovery;
@@ -550,10 +553,13 @@ onBeforeUnmount(() => {
           :identity="editorIdentity"
           :checkpoint="editorCheckpoint"
           :document-path="currentFilePath"
-          v-model="markdown"
-          v-model:source-mode="isSourceMode"
-          @selection-change="selection = $event"
-          @ready="editorReady = $event"
+          :model-value="markdown"
+          :source-mode="isSourceMode"
+          :generation="documentGeneration"
+          @document-change="documentTabs.updateMarkdown"
+          @mode-change="documentTabs.updateMode"
+          @selection-change="documentTabs.updateSelection"
+          @ready="onEditorReady"
           @error="showError(t('error.fileAction'), $event)"
         />
       </main>

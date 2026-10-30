@@ -53,9 +53,9 @@ createApp({ render: () => h("div", { class: "app-shell" }, [
   h("header", { style: "height:40px;flex-shrink:0" }, "Editor lifecycle fixture"),
   h("main", { class: ["editor-area", { "source-mode": sourceMode.value }] }, mounted.value ? [h(EditorSession, {
     ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value,
-    documentPath: null, options: {}, checkpoint: checkpoint.value,
-    "onUpdate:modelValue": (value: string) => { markdown.value = value; },
-    "onUpdate:sourceMode": (value: boolean) => { sourceMode.value = value; },
+    generation: 1, documentPath: null, options: {}, checkpoint: checkpoint.value,
+    onDocumentChange: (event: { value: string }) => { markdown.value = event.value; },
+    onModeChange: (event: { value: boolean }) => { sourceMode.value = event.value; },
     onError: (error: unknown) => errors.push(String(error)),
   })] : []),
 ]) }).mount("#app");
