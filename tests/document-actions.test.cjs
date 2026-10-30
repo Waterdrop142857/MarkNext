@@ -20,6 +20,7 @@ function loadModule(file, dependencies) {
     require(name) {
       if (name === '../i18n') return translations;
       if (name === '../config/preferences') return preferenceConfig;
+      if (name === '../document/types') return documentTypes;
       if (name === '../services/documentSafety') return documentSafety;
       assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
       return dependencies[name];
@@ -30,6 +31,7 @@ function loadModule(file, dependencies) {
 
 const catalogEn = loadModule('src/i18n/en.ts', {});
 const catalogZh = loadModule('src/i18n/zh-CN.ts', {});
+const documentTypes = loadModule('src/document/types.ts', {});
 const preferenceConfig = loadModule('src/config/preferences.ts', {});
 const documentSafety = loadModule('src/services/documentSafety.ts', {});
 const translations = loadModule('src/i18n/index.ts', { vue, './en': catalogEn, './zh-CN': catalogZh, '../config/preferences': preferenceConfig });

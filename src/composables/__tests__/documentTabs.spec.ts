@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick } from "vue";
 import { useDocumentTabs } from "../useDocumentTabs";
 import type { EditorSessionCheckpoint } from "../../editor/sessionTypes";
-import type { RecoverySnapshot } from "../../services/documentSafety";
+import type { RecoverySnapshot } from "../../document/types";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), save: vi.fn(), message: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));

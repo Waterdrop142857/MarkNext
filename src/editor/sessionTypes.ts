@@ -3,12 +3,12 @@
  * See docs/editor-session-history.md for ownership and lifecycle invariants.
  * This module must stay type-only: importing a session must not load an editor.
  */
-import type { FileFormat } from "../config/preferences";
+import type { FileFormat } from "../document/types";
 import type { ISerializedHistory } from "../muya/history";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { TState } from "../muya/state/types";
 import type { IMuyaOptions } from "../muya/types";
-import type { ExternalChange } from "../services/documentSafety";
+import type { ExternalChange } from "../document/types";
 
 export type DeepReadonly<T> = T extends object
   ? { readonly [K in keyof T]: DeepReadonly<T[K]> }

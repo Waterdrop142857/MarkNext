@@ -19,7 +19,7 @@ import { useNativeFileRequests } from "./composables/useNativeFileRequests";
 import DocumentTabs from "./components/DocumentTabs.vue";
 import { useDocumentAnalysis } from "./composables/useDocumentAnalysis";
 import type { OutlineHeading } from "./services/documentAnalysis";
-import type { RecoverySnapshot, RecoveryView } from "./services/documentSafety";
+import type { RecoverySnapshot, RecoveryView } from "./document/types";
 import { useWindowChrome } from "./composables/useWindowChrome";
 import { useTheme } from "./composables/useTheme";
 import { useShortcuts } from "./composables/useShortcuts";

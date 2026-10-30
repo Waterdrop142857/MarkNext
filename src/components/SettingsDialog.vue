@@ -2,7 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import ShortcutPane from "./ShortcutPane.vue";
 import { cloneBindings, type ShortcutBindings } from "../config/shortcuts";
-import { codeFonts, defaultPreferences, editorFonts, fileEncodings, fontStack, type Preferences, type SettingsCategory } from "../config/preferences";
+import { codeFonts, defaultPreferences, editorFonts, fontStack, type Preferences, type SettingsCategory } from "../config/preferences";
+import { fileEncodings } from "../document/types";
 import { t, supportedLanguages, detectLocale, type MessageKey } from "../i18n";
 
 const props = withDefaults(defineProps<{

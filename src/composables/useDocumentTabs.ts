@@ -4,13 +4,25 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspace } from "./useWorkspace";
 import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
 import { useRecovery } from "./useRecovery";
-import type { FileEncoding } from "../config/preferences";
+import type { ExternalChange, FileEncoding } from "../document/types";
+import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
 import type { EditorSessionCheckpoint } from "../editor/sessionTypes";
-import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../services/documentSafety";
+import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../document/types";
 import { informFileAlreadyOpen, showError } from "../services/dialogs";
 import { t } from "../i18n";
 
-type Workspace = ReturnType<typeof useWorkspace>;
+interface Workspace extends DocumentActionsSource, RecoverySource {
+  readonly markdown: Ref<string>;
+  readonly currentFilePath: Ref<string | null>;
+  readonly isUntitled: Ref<boolean>;
+  readonly isSourceMode: Ref<boolean>;
+  readonly selection: Ref<unknown>;
+  readonly documentGeneration: Ref<number>;
+  readonly externalChange: Readonly<Ref<ExternalChange | null>>;
+  readonly recoveredCopy: Readonly<Ref<boolean>>;
+  openPath(path: string): Promise<boolean>;
+  checkExternalChange(): Promise<boolean>;
+}
 interface SessionPort {
   flush(): void;
   capture(): Promise<EditorSessionCheckpoint | null>;

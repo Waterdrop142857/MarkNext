@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultFileFormat, defaultPreferences, fontStack, loadPreferences, SETTINGS_STORAGE_KEY, validatePreferences } from "../../config/preferences";
+import { defaultPreferences, fontStack, loadPreferences, SETTINGS_STORAGE_KEY, validatePreferences } from "../../config/preferences";
+import { defaultFileFormat } from "../../document/types";
 import { cloneBindings, defaultShortcutBindings } from "../../config/shortcuts";
 import { i18n, initializeI18n, LANGUAGE_STORAGE_KEY } from "../../i18n";
 import { usePreferences } from "../usePreferences";

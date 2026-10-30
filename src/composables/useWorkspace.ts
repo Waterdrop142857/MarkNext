@@ -2,9 +2,11 @@ import { t } from "../i18n";
 import { computed, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { defaultPreferences, defaultFileFormat, type FileEncoding, type FileFormat } from "../config/preferences";
+import { defaultPreferences } from "../config/preferences";
+import { defaultFileFormat, type FileEncoding, type FileFormat } from "../document/types";
 import { showError } from "../services/dialogs";
-import { conflictVersion, newDocumentId, type ExternalChange, type ReadDocument, type RecoverySnapshot } from "../services/documentSafety";
+import { conflictVersion, newDocumentId } from "../services/documentSafety";
+import type { ExternalChange, ReadDocument, RecoverySnapshot } from "../document/types";
 
 export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defaultPreferences.defaultEncoding, options: {
   resolveSavePath?: (path: string) => Promise<string | null>;

@@ -1,9 +1,7 @@
 import type { Locale, MessageKey } from "../i18n";
+import { fileEncodings, type FileEncoding } from "../document/types";
 
 export const SETTINGS_STORAGE_KEY = "marknext-settings-v1";
-export const fileEncodings = ["utf-8", "utf-8-bom", "utf-16le", "utf-16be"] as const;
-export type FileEncoding = typeof fileEncodings[number];
-export interface FileFormat { encoding: FileEncoding; bom: boolean }
 export type SettingsCategory = "appearance" | "editor" | "files" | "shortcuts";
 export interface Preferences {
   language: Locale;
@@ -43,8 +41,4 @@ export function fontStack(font: string, code = false): string {
   if (font === "monospace") return "'DejaVu Sans Mono', 'JetBrains Mono', Consolas, monospace";
   const quoted = `"${font.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   return `${quoted}, ${code ? "monospace" : "sans-serif"}`;
-}
-
-export function defaultFileFormat(encoding: FileEncoding): FileFormat {
-  return { encoding, bom: encoding !== "utf-8" };
 }

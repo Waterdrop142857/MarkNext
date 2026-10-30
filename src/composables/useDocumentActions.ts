@@ -1,12 +1,12 @@
 import { t } from "../i18n";
 import { askUnsavedChanges, askOverwrite, askExternalChange, showError } from "../services/dialogs";
-import type { RecoverySnapshot } from "../services/documentSafety";
-import type { useWorkspace } from "./useWorkspace";
+import type { RecoverySnapshot } from "../document/types";
+import type { DocumentActionsSource } from "../document/consumers";
 
 export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "exit" | "reload" | "overwrite";
 
 export function useDocumentActions(
-  workspace: ReturnType<typeof useWorkspace>,
+  workspace: DocumentActionsSource,
   options: { flushEditor: () => void; closeWindow: () => Promise<void>; documentName?: () => string },
 ) {
   let pending = false;

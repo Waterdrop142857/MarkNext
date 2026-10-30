@@ -1,6 +1,6 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
-import type { RecoverySnapshot } from "../../src/services/documentSafety";
+import type { RecoverySnapshot } from "../../src/document/types";
 
 // Test-only entry point. The production bundle starts from index.html and
 // never imports these native mocks; all UI/editor code remains the real app.

@@ -1,12 +1,12 @@
 import { ref, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import type { useWorkspace } from "./useWorkspace";
-import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../services/documentSafety";
-import { defaultFileFormat } from "../config/preferences";
+import type { RecoverySource } from "../document/consumers";
+import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../document/types";
+import { defaultFileFormat } from "../document/types";
 
 // One write queue orders backups and deletions across document switches. Never
 // send a mutable workspace object to an asynchronous write.
-export function useRecovery(workspace: ReturnType<typeof useWorkspace>, options: {
+export function useRecovery(workspace: RecoverySource, options: {
   flushEditor: () => void;
   getView?: () => RecoveryView | undefined;
 }) {

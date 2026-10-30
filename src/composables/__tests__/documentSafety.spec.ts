@@ -3,7 +3,7 @@ import { nextTick } from "vue";
 import { useWorkspace } from "../useWorkspace";
 import { useDocumentActions } from "../useDocumentActions";
 import { useRecovery } from "../useRecovery";
-import type { RecoverySnapshot } from "../../services/documentSafety";
+import type { RecoverySnapshot } from "../../document/types";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), save: vi.fn(), message: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));

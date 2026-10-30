@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { t, useI18n } from "../i18n";
-import type { RecoverySnapshot } from "../services/documentSafety";
+import type { RecoverySnapshot } from "../document/types";
 
 defineProps<{ records: RecoverySnapshot[]; unreadable: number; busy: boolean }>();
 const emit = defineEmits<{

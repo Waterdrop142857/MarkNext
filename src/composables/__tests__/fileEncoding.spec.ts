@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { useWorkspace } from "../useWorkspace";
-import type { FileEncoding } from "../../config/preferences";
+import type { FileEncoding } from "../../document/types";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), save: vi.fn(), message: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));
