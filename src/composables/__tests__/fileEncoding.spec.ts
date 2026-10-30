@@ -1,6 +1,6 @@
 import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { beforeEach, expect, it, vi } from "vitest";
-import { useWorkspace } from "../useWorkspace";
+import { createDocumentController } from "../../document/createDocumentController";
 import type { FileEncoding } from "../../document/types";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), open: vi.fn(), save: vi.fn(), message: vi.fn() }));
@@ -13,7 +13,7 @@ beforeEach(() => {
 
 it("captures default encoding at new document creation and retains it for Save As", async () => {
   let encoding: FileEncoding = "utf-16le";
-  const workspace = useWorkspace(() => encoding, createTauriDocumentPorts()); workspace.newFile(); workspace.markdown.value = "你好";
+  const workspace = createDocumentController(() => encoding, createTauriDocumentPorts()); workspace.newFile(); workspace.markdown.value = "你好";
   encoding = "utf-8";
   expect(await workspace.saveFile()).toBe(true);
   expect(native.invoke).toHaveBeenCalledWith("write_file", { path: "/saved.md", content: "你好", encoding: "utf-16le", bom: true, expectedVersion: "missing" });
@@ -21,7 +21,7 @@ it("captures default encoding at new document creation and retains it for Save A
 });
 
 it("passes the fallback to reads and preserves detected encoding and absent BOM on Save and Save As", async () => {
-  const workspace = useWorkspace(() => "utf-8-bom", createTauriDocumentPorts());
+  const workspace = createDocumentController(() => "utf-8-bom", createTauriDocumentPorts());
   expect(await workspace.openFile()).toBe(true);
   expect(native.invoke).toHaveBeenCalledWith("read_file", { path: "/opened.md", defaultEncoding: "utf-8-bom" });
   workspace.markdown.value += " edit";
@@ -34,7 +34,7 @@ it("passes the fallback to reads and preserves detected encoding and absent BOM 
 });
 
 it("does not replace current format when the incoming document is cancelled", async () => {
-  const workspace = useWorkspace(() => "utf-8", createTauriDocumentPorts()); workspace.newFile();
+  const workspace = createDocumentController(() => "utf-8", createTauriDocumentPorts()); workspace.newFile();
   expect(await workspace.openFile(async () => false)).toBe(false);
   expect(workspace.fileFormat.value).toEqual({ encoding: "utf-8", bom: false });
   workspace.closeFile(); expect(workspace.fileFormat.value).toBeNull();
@@ -45,7 +45,7 @@ it("isolates encoding snapshots between queued saves and document generations", 
   const pending = new Promise<string>(done => { resolve = done; });
   native.invoke.mockImplementationOnce(() => pending).mockResolvedValue("written");
   let encoding: FileEncoding = "utf-16le";
-  const workspace = useWorkspace(() => encoding, createTauriDocumentPorts());
+  const workspace = createDocumentController(() => encoding, createTauriDocumentPorts());
   workspace.newFile(); workspace.currentFilePath.value = "/first.md"; workspace.markdown.value = "first";
   const first = workspace.saveFile(); await Promise.resolve();
   encoding = "utf-8"; workspace.newFile(); workspace.currentFilePath.value = "/second.md"; workspace.markdown.value = "second";

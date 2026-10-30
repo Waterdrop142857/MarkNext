@@ -1,7 +1,7 @@
 import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import { useWorkspace } from "../useWorkspace";
+import { createDocumentController } from "../../document/createDocumentController";
 import { useDocumentActions } from "../useDocumentActions";
 import { useDocumentRecovery } from "../../workspace/useDocumentRecovery";
 import type { RecoverySnapshot } from "../../document/types";
@@ -41,11 +41,11 @@ beforeEach(() => {
   });
 });
 afterEach(() => { managers.splice(0).forEach(manager => manager.stop()); vi.useRealTimers(); });
-async function opened() { const workspace = useWorkspace(() => "utf-8", createTauriDocumentPorts()); await workspace.openFile(); return workspace; }
-function actions(workspace: ReturnType<typeof useWorkspace>) {
+async function opened() { const workspace = createDocumentController(() => "utf-8", createTauriDocumentPorts()); await workspace.openFile(); return workspace; }
+function actions(workspace: ReturnType<typeof createDocumentController>) {
   return useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: () => {}, closeWindow: async () => {} });
 }
-function manager(workspace: ReturnType<typeof useWorkspace>) {
+function manager(workspace: ReturnType<typeof createDocumentController>) {
   const value = useDocumentRecovery(workspace, createTauriDocumentPorts().recovery, { flushEditor: () => {}, getView: () => ({ scrollTop: 123 }) });
   managers.push(value); return value;
 }
@@ -186,7 +186,7 @@ it("uses metadata for unchanged polling and fingerprints each newly observed dis
 });
 
 it.each(["changed", "deleted"])("restores %s originals as independent copies with preserved encoding and empty edits", async kind => {
-  const workspace = useWorkspace(() => "utf-8", createTauriDocumentPorts()); const snapshot = { ...record(), content: "" };
+  const workspace = createDocumentController(() => "utf-8", createTauriDocumentPorts()); const snapshot = { ...record(), content: "" };
   if (kind === "changed") disk.set("/note.md", "external"); else disk.delete("/note.md");
   const original = disk.get("/note.md");
   expect(await actions(workspace).restore(snapshot)).toBe(true);

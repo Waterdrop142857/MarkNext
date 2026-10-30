@@ -20,8 +20,8 @@ function loadModule(file, dependencies) {
     require(name) {
       if (name === '../i18n') return translations;
       if (name === '../config/preferences') return preferenceConfig;
-      if (name === '../document/types') return documentTypes;
-      if (name === '../document/useDocumentState') return documentState;
+      if (name === '../document/types' || name === './types') return documentTypes;
+      if (name === '../document/useDocumentState' || name === './useDocumentState') return documentState;
       if (name === '../services/documentSafety') return documentSafety;
       assert.ok(name in dependencies, `Unexpected dependency: ${name}`);
       return dependencies[name];
@@ -77,8 +77,8 @@ function harness(choices = ['不保存'], options = {}) {
     '../../i18n': translations, '../../services/dialogs': dialogs,
   });
   const ports = createTauriDocumentPorts();
-  const { useWorkspace } = loadModule('src/composables/useWorkspace.ts', { vue });
-  workspace = useWorkspace(() => 'utf-8', ports);
+  const { createDocumentController } = loadModule('src/document/createDocumentController.ts', { vue });
+  workspace = createDocumentController(() => 'utf-8', ports);
   workspace.currentFilePath.value = '/old.md';
   workspace.savedMarkdown.value = 'saved';
   workspace.markdown.value = 'edited';

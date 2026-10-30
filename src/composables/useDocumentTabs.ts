@@ -1,5 +1,5 @@
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
-import { useWorkspace } from "./useWorkspace";
+import { createDocumentController } from "../document/createDocumentController";
 import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
 import { useDocumentRecovery } from "../workspace/useDocumentRecovery";
 import { useRecoveryCatalog } from "../workspace/useRecoveryCatalog";
@@ -69,7 +69,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
 
   function createWorkspace() {
     let workspace: Workspace;
-    workspace = useWorkspace(getDefaultEncoding, ports, {
+    workspace = createDocumentController(getDefaultEncoding, ports, {
       resolveSavePath: async path => {
         const selected = await canonical(path);
         const duplicate = documents.value.find(tab => tab.workspace !== workspace && tab.workspace.currentFilePath.value === selected);

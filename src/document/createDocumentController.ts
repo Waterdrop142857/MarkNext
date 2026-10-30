@@ -1,10 +1,10 @@
-import { defaultFileFormat, type FileEncoding } from "../document/types";
+import { defaultFileFormat, type FileEncoding } from "./types";
 import { conflictVersion, newDocumentId } from "../services/documentSafety";
-import type { ExternalChange, RecoverySnapshot } from "../document/types";
-import type { DocumentPorts } from "../document/ports";
-import { useDocumentState } from "../document/useDocumentState";
+import type { ExternalChange, RecoverySnapshot } from "./types";
+import type { DocumentPorts } from "./ports";
+import { useDocumentState } from "./useDocumentState";
 
-export function useWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, options: {
+export function createDocumentController(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, options: {
   resolveSavePath?: (path: string) => Promise<string | null>;
 } = {}) {
   const { markdown, currentFilePath, savedMarkdown, isUntitled, isSourceMode, selection,

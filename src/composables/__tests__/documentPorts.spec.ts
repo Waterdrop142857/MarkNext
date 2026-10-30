@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { useWorkspace } from "../useWorkspace";
+import { createDocumentController } from "../../document/createDocumentController";
 import { useDocumentActions } from "../useDocumentActions";
 import type { DocumentPorts } from "../../document/ports";
 
@@ -21,7 +21,7 @@ it("uses the injected file port and retains edits made while a saved snapshot is
   const ports = memoryPorts();
   let finish!: (version: string) => void;
   const write = vi.spyOn(ports.files, "write").mockReturnValue(new Promise(resolve => { finish = resolve; }));
-  const workspace = useWorkspace(() => "utf-8", ports);
+  const workspace = createDocumentController(() => "utf-8", ports);
   expect(await workspace.openFile()).toBe(true);
   workspace.markdown.value = "first edit";
   const saving = workspace.saveFile();
@@ -37,7 +37,7 @@ it("uses the injected file port and retains edits made while a saved snapshot is
 it("uses the injected prompt and leaves the document untouched when replacement is cancelled", async () => {
   const ports = memoryPorts();
   ports.prompts.unsaved = vi.fn().mockResolvedValue("cancel");
-  const workspace = useWorkspace(() => "utf-8", ports);
+  const workspace = createDocumentController(() => "utf-8", ports);
   workspace.newFile(); workspace.markdown.value = "unsaved";
   const actions = useDocumentActions(workspace, ports.prompts, { flushEditor() {}, closeWindow: async () => {} });
   expect(await actions.run("new")).toBe(false);
