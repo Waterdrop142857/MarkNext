@@ -10,6 +10,8 @@ import type { IHistorySelection } from "../muya/selection/types";
 import type { DocumentRevision, EditorSessionCheckpoint, MuyaCheckpoint, SourceCheckpoint } from "../editor/sessionTypes";
 import { cloneData, decodeSessionCheckpoint, freezeData, matchesRevision } from "../editor/checkpointCodec";
 import { readClipboardData } from "../services/clipboard";
+import { createMuyaCommands } from "../editor/muyaCommands";
+import { createSourceCommands } from "../editor/sourceCommands";
 import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
 
@@ -231,72 +233,33 @@ async function toggleMode(): Promise<boolean> {
   }, false);
 }
 
-// UI commands are routed through this session so engine objects and DOM stay
-// within the renderer lifetime. A queued async paste checks the renderer lease.
+// The session owns lifetime and mode checks; engine adapters own their details.
+const muyaCommands = createMuyaCommands(() => muya.value);
+const sourceCommands = createSourceCommands(() => sourceRef.value);
 function interactive() { return !disposed && !transitioning && !composing && !suspended.value; }
 function focus() {
   if (!interactive()) return;
-  if (props.sourceMode) sourceRef.value?.focus(); else muya.value?.focus();
-}
-function captureMuyaSelection(): IHistorySelection | null {
-  const current = muya.value?.getSelection();
-  if (!current?.anchor || !current.focus) return null;
-  return {
-    anchor: { offset: current.anchor.offset, path: [...current.anchor.path] },
-    focus: { offset: current.focus.offset, path: [...current.focus.path] },
-    isCollapsed: current.isCollapsed, isSelectionInSameBlock: current.isSelectionInSameBlock,
-    direction: current.direction, type: current.type,
-  };
+  if (props.sourceMode) sourceCommands.focus(); else muyaCommands.focus();
 }
 function captureView(): RecoveryView {
-  return props.sourceMode
-    ? { scrollTop: sourceRef.value?.getScrollTop() ?? 0, sourceCursor: sourceRef.value?.getCursorOffset() ?? undefined }
-    : { scrollTop: muya.value?.domNode.parentElement?.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
+  return props.sourceMode ? sourceCommands.captureView() : muyaCommands.captureView();
 }
 function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
   try {
-    if (sourceMode) {
-      sourceRef.value?.setCursorOffset(view?.sourceCursor ?? null);
-      sourceRef.value?.setScrollTop(view?.scrollTop ?? 0);
-    } else if (muya.value) {
-      const selection = view?.muyaSelection;
-      if (selection) muya.value.setCursor({ anchor: selection.anchor, anchorPath: selection.anchor.path, focus: selection.focus, focusPath: selection.focus.path });
-      const scrollHost = muya.value.domNode.parentElement;
-      if (scrollHost) scrollHost.scrollTop = view?.scrollTop ?? 0;
-    }
+    if (sourceMode) sourceCommands.applyView(view); else muyaCommands.applyView(view);
   } catch { /* Stale view data must never prevent restoring text. */ }
 }
 function navigateHeading(target: OutlineHeading): boolean {
   if (!interactive()) return false;
-  if (props.sourceMode) {
-    if (!sourceRef.value) return false;
-    sourceRef.value.goToLine(target.line);
-    return true;
-  }
-  const editor = muya.value;
-  if (!editor?.editor.scrollPage) return false;
-  let index = 0;
-  for (const block of editor.editor.scrollPage.children.iterator()) {
-    if (block.blockName !== "atx-heading" && block.blockName !== "setext-heading") continue;
-    if (index++ !== target.index || !block.isParent()) continue;
-    const content = block.firstContentInDescendant();
-    if (!content) return false;
-    editor.focus();
-    const offset = block.blockName === "atx-heading" ? Math.min(target.level + 1, content.text.length) : 0;
-    content.setCursor(offset, offset, true);
-    block.domNode?.scrollIntoView({ block: "center", inline: "nearest" });
-    return true;
-  }
-  return false;
+  return props.sourceMode ? sourceCommands.navigateHeading(target) : muyaCommands.navigateHeading(target);
 }
 function selectAll() {
   if (!interactive()) return;
-  if (props.sourceMode) sourceRef.value?.selectAll(); else muya.value?.selectAllDocument();
+  if (props.sourceMode) sourceCommands.selectAll(); else muyaCommands.selectAll();
 }
 function clearUndoably() {
   if (!interactive()) return;
-  if (props.sourceMode) sourceRef.value?.clearUndoably();
-  else if (muya.value && props.modelValue) muya.value.replaceContent("", captureMuyaSelection() ?? undefined);
+  if (props.sourceMode) sourceCommands.clear(); else muyaCommands.clear(props.modelValue);
 }
 async function paste() {
   if (!interactive()) return;
@@ -305,40 +268,25 @@ async function paste() {
   const editor = muya.value, source = sourceRef.value;
   const data = await readClipboardData();
   if (!interactive() || props.identity.documentId !== doc || props.sourceMode !== mode || activation.value !== currentActivation) return;
-  if (mode && source && source === sourceRef.value) source.pasteText(data.getData("text/plain"));
-  else if (!mode && editor && editor === muya.value) await editor.editor.clipboard.pasteHandler(new ClipboardEvent("paste", { clipboardData: data }));
+  if (mode && source && source === sourceRef.value) sourceCommands.paste(data);
+  else if (!mode && editor && editor === muya.value) await muyaCommands.paste(data);
 }
 function search(query: string) {
   if (!interactive()) return;
-  if (props.sourceMode) sourceRef.value?.search(query);
-  else if (muya.value) { muya.value.flush(); muya.value.search(query); }
+  if (props.sourceMode) sourceCommands.search(query); else muyaCommands.search(query);
 }
 function closeSearch() {
   if (!interactive()) return;
-  sourceRef.value?.search("");
-  if (muya.value && !props.sourceMode) muya.value.search("", { selectHighlight: true });
+  sourceCommands.closeSearch();
+  if (!props.sourceMode) muyaCommands.closeSearch();
 }
 function find(query: string, forward: boolean) {
   if (!interactive() || !query) return;
-  if (props.sourceMode) {
-    if (forward) sourceRef.value?.findNext(query); else sourceRef.value?.findPrev(query);
-  } else if (muya.value) {
-    muya.value.flush();
-    if (muya.value.editor.searchModule.value !== query) {
-      muya.value.search(query);
-      if (!forward) muya.value.find("previous");
-    } else muya.value.find(forward ? "next" : "previous");
-  }
+  if (props.sourceMode) sourceCommands.find(query, forward); else muyaCommands.find(query, forward);
 }
 function replace(query: string, replacement: string, all: boolean) {
   if (!interactive() || !query) return;
-  if (props.sourceMode) {
-    if (all) sourceRef.value?.replaceAll(query, replacement); else sourceRef.value?.replaceCurrent(query, replacement);
-  } else if (muya.value) {
-    muya.value.flush();
-    if (muya.value.editor.searchModule.value !== query) muya.value.search(query);
-    muya.value.replace(replacement, { isSingle: !all, isRegexp: false });
-  }
+  if (props.sourceMode) sourceCommands.replace(query, replacement, all); else muyaCommands.replace(query, replacement, all);
 }
 
 // Disk/recovery actions can request source mode without a user mode toggle.
