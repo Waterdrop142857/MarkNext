@@ -60,6 +60,25 @@ test("source tabs retain mode, history, cursor and scroll with a preserved Muya 
   await expect(page.locator(".mu-editor")).not.toContainText("source edit");
 });
 
+test("search and replace remain available after a source-only tab is restored", async ({ page }) => {
+  await open(page, "/one.md", "foo bar foo");
+  await page.keyboard.press("Control+Shift+M");
+  await expect(page.locator(".CodeMirror")).toBeVisible();
+  await open(page, "/two.md", "other");
+  await page.getByRole("tab", { name: /one.md/ }).click();
+  await expect(page.locator(".CodeMirror")).toBeVisible();
+  await expect(page.locator(".mu-editor")).toHaveCount(0);
+  await page.keyboard.press("Control+H");
+  await page.getByPlaceholder("查找").fill("foo");
+  await page.getByPlaceholder("替换为").fill("X");
+  const replaceAll = page.getByRole("button", { name: "全部替换", exact: true });
+  await expect(replaceAll).toBeEnabled();
+  await replaceAll.click();
+  expect(await sourceText(page)).toBe("X bar X");
+  await page.keyboard.press("Control+Z");
+  expect(await sourceText(page)).toBe("foo bar foo");
+});
+
 test("multiple selection and canonical aliases focus existing tabs without duplicate reads", async ({ page }) => {
   await page.evaluate(() => {
     const f = window.nativeFixture;

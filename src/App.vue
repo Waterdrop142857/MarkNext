@@ -13,7 +13,7 @@ import { fontStack, type Preferences, type SettingsCategory } from "./config/pre
 import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/shortcuts";
 import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
-import type { Muya, IMuyaOptions } from "./muya";
+import type { EditorAppearance, EditorPort } from "./editor/editorPort";
 import { useDocumentTabs } from "./composables/useDocumentTabs";
 import { useNativeFileRequests } from "./composables/useNativeFileRequests";
 import DocumentTabs from "./components/DocumentTabs.vue";
@@ -24,11 +24,9 @@ import { useWindowChrome } from "./composables/useWindowChrome";
 import { useTheme } from "./composables/useTheme";
 import { useShortcuts } from "./composables/useShortcuts";
 import { createShortcutHandler } from "./services/shortcutHandler";
-import { readClipboardData } from "./services/clipboard";
 import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
-import type { IHistorySelection } from "./muya/selection/types";
 
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
@@ -79,24 +77,7 @@ function navigateOutline(heading: OutlineHeading) {
   flushEditor();
   const target = refreshAnalysis().headings.find(item => item.id === heading.id && item.text === heading.text);
   if (!target) return;
-  if (isSourceMode.value) sourceEditorRef.value?.goToLine(target.line);
-  else {
-    const muya = muyaEditor.value;
-    if (!muya?.editor.scrollPage) return;
-    let index = 0;
-    for (const block of muya.editor.scrollPage.children.iterator()) {
-      if (block.blockName !== "atx-heading" && block.blockName !== "setext-heading") continue;
-      if (index++ !== target.index || !block.isParent()) continue;
-      const content = block.firstContentInDescendant();
-      if (!content) return;
-      muya.focus();
-      const offset = block.blockName === "atx-heading" ? Math.min(target.level + 1, content.text.length) : 0;
-      content.setCursor(offset, offset, true);
-      block.domNode?.scrollIntoView({ block: "center", inline: "nearest" });
-      break;
-    }
-  }
-  activeHeading.value = target.id;
+  if (editorSessionRef.value?.navigateHeading(target)) activeHeading.value = target.id;
 }
 
 const {
@@ -116,7 +97,7 @@ const recoveryOpen = ref(false);
 const recoveryBusy = ref(false);
 const { externalChange, recoveredCopy } = workspace;
 const settingsCategory = ref<SettingsCategory>("appearance");
-const editorAppearance = computed<Partial<IMuyaOptions>>(previous => {
+const editorAppearance = computed<EditorAppearance>(previous => {
   const next = {
     fontSize: preferences.value.editorFontSize,
     editorFontFamily: fontStack(preferences.value.editorFont),
@@ -156,9 +137,8 @@ watch([
 
 const openMenuId = ref<string | null>(null);
 const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[]; tabId?: string } | null>(null);
-const muyaEditor = shallowRef<Muya | null>(null);
-const editorSessionRef = ref<InstanceType<typeof EditorSessionComponent> | null>(null);
-const sourceEditorRef = computed(() => editorSessionRef.value?.getSource() ?? null);
+const editorReady = ref(false);
+const editorSessionRef = ref<EditorPort | null>(null);
 const editorIdentity = documentTabs.identity;
 const editorCheckpoint = documentTabs.checkpoint;
 
@@ -171,9 +151,7 @@ const nativeFiles = useNativeFileRequests(async paths => {
   return done;
 });
 
-function focusEditor() {
-  if (isSourceMode.value) sourceEditorRef.value?.focus(); else muyaEditor.value?.focus();
-}
+function focusEditor() { editorSessionRef.value?.focus(); }
 async function activateTab(id: string, focus = true) {
   if (await documentTabs.activate(id)) { if (focus) focusEditor(); await checkDisk(); }
 }
@@ -182,27 +160,10 @@ async function closeTab(id: string) {
 }
 
 function captureView(): RecoveryView {
-  return isSourceMode.value
-    ? { scrollTop: sourceEditorRef.value?.getScrollTop() ?? 0, sourceCursor: sourceEditorRef.value?.getCursorOffset() ?? undefined }
-    : { scrollTop: muyaEditor.value?.domNode.parentElement?.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
+  return editorSessionRef.value?.captureView() ?? { scrollTop: 0 };
 }
-
 function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
-  // View metadata is best-effort. Invalid/stale cursor paths must never prevent
-  // recovering the document's text or reloading a changed disk file.
-  try {
-    if (sourceMode) {
-      sourceEditorRef.value?.setCursorOffset(view?.sourceCursor ?? null);
-      sourceEditorRef.value?.setScrollTop(view?.scrollTop ?? 0);
-    }
-    else if (muyaEditor.value) {
-      const selection = view?.muyaSelection;
-      if (selection) muyaEditor.value.setCursor({ anchor: selection.anchor, anchorPath: selection.anchor.path, focus: selection.focus, focusPath: selection.focus.path });
-      const scrollHost = muyaEditor.value.domNode.parentElement;
-      if (scrollHost) scrollHost.scrollTop = view?.scrollTop ?? 0;
-    }
-  }
-  catch { /* Content has already been restored; use the editor's default view. */ }
+  editorSessionRef.value?.applyView(view, sourceMode);
 }
 
 async function reloadDocument(reviewExternal = false) {
@@ -256,22 +217,9 @@ function handleVisibility() {
   else void checkDisk();
 }
 
-function captureMuyaSelection(): IHistorySelection | null {
-  const selection = muyaEditor.value?.getSelection();
-  if (!selection?.anchor || !selection.focus) return null;
-  return {
-    anchor: { offset: selection.anchor.offset, path: [...selection.anchor.path] },
-    focus: { offset: selection.focus.offset, path: [...selection.focus.path] },
-    isCollapsed: selection.isCollapsed,
-    isSelectionInSameBlock: selection.isSelectionInSameBlock,
-    direction: selection.direction,
-    type: selection.type,
-  };
-}
-
 watch(documentGeneration, () => {
   activeHeading.value = null;
-  muyaEditor.value = null;
+  editorReady.value = false;
 }, { flush: "sync" });
 
 async function toggleEditorMode() {
@@ -410,21 +358,8 @@ function editorUndo() {
 }
 
 async function pasteClipboard() {
-  if (document.execCommand("paste")) return;
-  const generation = documentGeneration.value;
-  const sourceMode = isSourceMode.value;
-  const muya = muyaEditor.value;
-  try {
-    const data = await readClipboardData();
-    if (generation !== documentGeneration.value || sourceMode !== isSourceMode.value) return;
-    if (sourceMode) sourceEditorRef.value?.pasteText(data.getData("text/plain"));
-    else if (muya && muya === muyaEditor.value) {
-      await muya.editor.clipboard.pasteHandler(new ClipboardEvent("paste", { clipboardData: data }));
-    }
-  }
-  catch (error) {
-    await showError(t("error.paste"), error);
-  }
+  try { await editorSessionRef.value?.paste(); }
+  catch (error) { await showError(t("error.paste"), error); }
 }
 
 function editorRedo() {
@@ -433,26 +368,11 @@ function editorRedo() {
 }
 
 function selectAllDocument() {
-  if (!isSourceMode.value && muyaEditor.value) {
-    muyaEditor.value.selectAllDocument();
-  }
-  else if (isSourceMode.value) {
-    sourceEditorRef.value?.selectAll();
-  }
-  else {
-    document.execCommand("selectAll");
-  }
+  if (editorSessionRef.value) editorSessionRef.value.selectAll();
+  else document.execCommand("selectAll");
 }
 
-function clearEditorContent() {
-  if (isSourceMode.value) {
-    sourceEditorRef.value?.clearUndoably();
-    return;
-  }
-  const muya = muyaEditor.value;
-  if (!muya || !markdown.value) return;
-  muya.replaceContent("", captureMuyaSelection() ?? undefined);
-}
+function clearEditorContent() { editorSessionRef.value?.clearUndoably(); }
 
 function openSearch(isReplace = false) {
   searchOpen.value = true;
@@ -471,65 +391,15 @@ function openSearch(isReplace = false) {
 function closeSearch() {
   searchOpen.value = false;
   replaceOpen.value = false;
-  sourceEditorRef.value?.search("");
-  // Drop Muya's search highlights and restore caret to the active match.
-  if (muyaEditor.value && !isSourceMode.value) {
-    muyaEditor.value.search("", { selectHighlight: true });
-  }
+  editorSessionRef.value?.closeSearch();
 }
 
-function runSearch() {
-  const query = searchQuery.value;
-  if (!isSourceMode.value && muyaEditor.value) {
-    muyaEditor.value.flush();
-    muyaEditor.value.search(query);
-  }
-  else sourceEditorRef.value?.search(query);
-}
+function runSearch() { editorSessionRef.value?.search(searchQuery.value); }
+function findInDocument(forward = true) { editorSessionRef.value?.find(searchQuery.value, forward); }
+function runReplace() { editorSessionRef.value?.replace(searchQuery.value, replaceQuery.value, false); }
+function runReplaceAll() { editorSessionRef.value?.replace(searchQuery.value, replaceQuery.value, true); }
 
-function findInDocument(forward = true) {
-  const query = searchQuery.value;
-  if (!query) return;
-  if (!isSourceMode.value && muyaEditor.value) {
-    muyaEditor.value.flush();
-    if (muyaEditor.value.editor.searchModule.value !== query) {
-      muyaEditor.value.search(query);
-      if (!forward) muyaEditor.value.find("previous");
-      return;
-    }
-    muyaEditor.value.find(forward ? "next" : "previous");
-  }
-  else {
-    if (forward) sourceEditorRef.value?.findNext(query);
-    else sourceEditorRef.value?.findPrev(query);
-  }
-}
-
-function runReplace() {
-  if (!searchQuery.value) return;
-  if (isSourceMode.value) {
-    sourceEditorRef.value?.replaceCurrent(searchQuery.value, replaceQuery.value);
-  }
-  else if (muyaEditor.value) {
-    muyaEditor.value.flush();
-    if (muyaEditor.value.editor.searchModule.value !== searchQuery.value) muyaEditor.value.search(searchQuery.value);
-    muyaEditor.value.replace(replaceQuery.value, { isSingle: true, isRegexp: false });
-  }
-}
-
-function runReplaceAll() {
-  if (!searchQuery.value) return;
-  if (isSourceMode.value) {
-    sourceEditorRef.value?.replaceAll(searchQuery.value, replaceQuery.value);
-  }
-  else if (muyaEditor.value) {
-    muyaEditor.value.flush();
-    if (muyaEditor.value.editor.searchModule.value !== searchQuery.value) muyaEditor.value.search(searchQuery.value);
-    muyaEditor.value.replace(replaceQuery.value, { isSingle: false, isRegexp: false });
-  }
-}
-
-watch([documentGeneration, isSourceMode, muyaEditor], async () => {
+watch([documentGeneration, isSourceMode, editorReady], async () => {
   await nextTick();
   if (searchOpen.value) runSearch();
 });
@@ -746,8 +616,8 @@ onBeforeUnmount(() => {
           spellcheck="false"
           @keydown.enter="runReplace"
         />
-        <button type="button" :disabled="!searchQuery || !muyaEditor" @click="runReplace">{{ t('search.replace') }}</button>
-        <button type="button" :disabled="!searchQuery || !muyaEditor" @click="runReplaceAll">{{ t('search.replaceAll') }}</button>
+        <button type="button" :disabled="!searchQuery || !editorReady" @click="runReplace">{{ t('search.replace') }}</button>
+        <button type="button" :disabled="!searchQuery || !editorReady" @click="runReplaceAll">{{ t('search.replaceAll') }}</button>
       </div>
     </div>
 
@@ -772,7 +642,7 @@ onBeforeUnmount(() => {
           v-model="markdown"
           v-model:source-mode="isSourceMode"
           @selection-change="selection = $event"
-          @ready="muyaEditor = $event"
+          @ready="editorReady = $event"
           @error="showError(t('error.fileAction'), $event)"
         />
       </main>

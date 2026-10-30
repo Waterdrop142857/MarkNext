@@ -7,6 +7,7 @@ import { useRecovery } from "./useRecovery";
 import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
 import type { EditorSessionCheckpoint } from "../editor/sessionTypes";
+import type { EditorLifecyclePort } from "../editor/editorPort";
 import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../document/types";
 import { informFileAlreadyOpen, showError } from "../services/dialogs";
 import { t } from "../i18n";
@@ -23,12 +24,6 @@ interface Workspace extends DocumentActionsSource, RecoverySource {
   openPath(path: string): Promise<boolean>;
   checkExternalChange(): Promise<boolean>;
 }
-interface SessionPort {
-  flush(): void;
-  capture(): Promise<EditorSessionCheckpoint | null>;
-  suspend(): Promise<EditorSessionCheckpoint | null>;
-  resume(): Promise<boolean>;
-}
 export interface DocumentTab {
   readonly id: string;
   readonly workspace: Workspace;
@@ -43,7 +38,7 @@ export interface DocumentTab {
 export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "previousTab";
 
 export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
-  editor(): SessionPort | null;
+  editor(): EditorLifecyclePort | null;
   prepareEditor?(): Promise<void>;
   getView(): RecoveryView;
   applyView?(view: RecoveryView | undefined, sourceMode: boolean): void;

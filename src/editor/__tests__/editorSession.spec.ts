@@ -4,6 +4,7 @@ import type CodeMirror from "codemirror";
 import type { IMuyaOptions } from "../../muya/types";
 import EditorSession from "../../components/EditorSession.vue";
 import type { EditorSessionCheckpoint } from "../sessionTypes";
+import * as clipboard from "../../services/clipboard";
 
 const cleanup: (() => void)[] = [];
 beforeEach(() => {
@@ -139,6 +140,26 @@ describe("editor session lifecycle", () => {
     finish(); await task;
     expect((await suspension)?.active.markdown.trim()).toBe("async edit arrived");
     await session.value!.resume(); expect(markdown.value.trim()).toBe("async edit arrived");
+  });
+
+  it("does not paste clipboard data into a renderer that was suspended and restored while reading", async () => {
+    const { session, source } = await mount("start");
+    expect(await session.value!.toggleMode()).toBe(true);
+    let finish!: (data: DataTransfer) => void;
+    vi.spyOn(clipboard, "readClipboardData").mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const original = Object.getOwnPropertyDescriptor(document, "execCommand");
+    Object.defineProperty(document, "execCommand", { configurable: true, value: () => false });
+    try {
+      const pasting = session.value!.paste();
+      expect(await session.value!.suspend()).not.toBeNull();
+      expect(await session.value!.resume()).toBe(true);
+      finish({ getData: () => "wrong document" } as unknown as DataTransfer);
+      await pasting;
+      expect(source().getValue()).toBe("start");
+    } finally {
+      if (original) Object.defineProperty(document, "execCommand", original);
+      else Reflect.deleteProperty(document, "execCommand");
+    }
   });
 
   it("rejects stale suspended revisions and cancels queued composition work on disposal", async () => {

@@ -8,6 +8,9 @@ import type { Muya, IMuyaOptions } from "../muya";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { DocumentRevision, EditorSessionCheckpoint, MuyaCheckpoint, SourceCheckpoint } from "../editor/sessionTypes";
 import { cloneData, decodeSessionCheckpoint, freezeData, matchesRevision } from "../editor/checkpointCodec";
+import { readClipboardData } from "../services/clipboard";
+import type { RecoveryView } from "../document/types";
+import type { OutlineHeading } from "../services/documentAnalysis";
 
 const props = defineProps<{
   modelValue: string;
@@ -20,7 +23,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: "update:modelValue", value: string): void;
   (event: "update:sourceMode", value: boolean): void;
-  (event: "ready", value: Muya | null): void;
+  (event: "ready", value: boolean): void;
   (event: "selection-change", value: unknown): void;
   (event: "error", error: unknown): void;
 }>();
@@ -46,7 +49,9 @@ let transitioning = false;
 const waiting = new Set<(ready: boolean) => void>();
 const taskWaiting = new Set<(ready: boolean) => void>();
 
-function onReady(value: Muya) { muya.value = value; emit("ready", value); }
+function onReady(value: Muya) { muya.value = value; }
+const ready = computed(() => !suspended.value && (props.sourceMode ? !!sourceRef.value : !!muya.value));
+watch(ready, value => emit("ready", value), { immediate: true });
 function failed(error: unknown) { restoreError = error; emit("error", error); }
 function compositionEnd() {
   composing = false;
@@ -121,7 +126,7 @@ async function suspend(): Promise<EditorSessionCheckpoint | null> {
     muyaRef.value?.getHistoryAdapter()?.destroy();
     sourceRef.value?.getHistoryAdapter()?.destroy();
     activation.value++;
-    muya.value = null; emit("ready", null);
+    muya.value = null;
     muyaMounted.value = sourceMounted.value = false;
     muyaCheckpoint.value = sourceCheckpoint.value = null;
     await nextTick();
@@ -153,7 +158,7 @@ async function resume(): Promise<boolean> {
     if (disposed || restoreError || !matchesRevision(snapshot.active, props.identity)) {
       muyaRef.value?.getHistoryAdapter()?.destroy();
       sourceRef.value?.getHistoryAdapter()?.destroy();
-      muya.value = null; emit("ready", null);
+      muya.value = null;
       muyaMounted.value = sourceMounted.value = false;
       await nextTick();
       return false; // The checkpoint remains available for retry.
@@ -221,6 +226,116 @@ async function toggleMode(): Promise<boolean> {
   }, false);
 }
 
+// UI commands are routed through this session so engine objects and DOM stay
+// within the renderer lifetime. A queued async paste checks the renderer lease.
+function interactive() { return !disposed && !transitioning && !composing && !suspended.value; }
+function focus() {
+  if (!interactive()) return;
+  if (props.sourceMode) sourceRef.value?.focus(); else muya.value?.focus();
+}
+function captureMuyaSelection(): IHistorySelection | null {
+  const current = muya.value?.getSelection();
+  if (!current?.anchor || !current.focus) return null;
+  return {
+    anchor: { offset: current.anchor.offset, path: [...current.anchor.path] },
+    focus: { offset: current.focus.offset, path: [...current.focus.path] },
+    isCollapsed: current.isCollapsed, isSelectionInSameBlock: current.isSelectionInSameBlock,
+    direction: current.direction, type: current.type,
+  };
+}
+function captureView(): RecoveryView {
+  return props.sourceMode
+    ? { scrollTop: sourceRef.value?.getScrollTop() ?? 0, sourceCursor: sourceRef.value?.getCursorOffset() ?? undefined }
+    : { scrollTop: muya.value?.domNode.parentElement?.scrollTop ?? 0, muyaSelection: captureMuyaSelection() ?? undefined };
+}
+function applyView(view: RecoveryView | null | undefined, sourceMode: boolean) {
+  try {
+    if (sourceMode) {
+      sourceRef.value?.setCursorOffset(view?.sourceCursor ?? null);
+      sourceRef.value?.setScrollTop(view?.scrollTop ?? 0);
+    } else if (muya.value) {
+      const selection = view?.muyaSelection;
+      if (selection) muya.value.setCursor({ anchor: selection.anchor, anchorPath: selection.anchor.path, focus: selection.focus, focusPath: selection.focus.path });
+      const scrollHost = muya.value.domNode.parentElement;
+      if (scrollHost) scrollHost.scrollTop = view?.scrollTop ?? 0;
+    }
+  } catch { /* Stale view data must never prevent restoring text. */ }
+}
+function navigateHeading(target: OutlineHeading): boolean {
+  if (!interactive()) return false;
+  if (props.sourceMode) {
+    if (!sourceRef.value) return false;
+    sourceRef.value.goToLine(target.line);
+    return true;
+  }
+  const editor = muya.value;
+  if (!editor?.editor.scrollPage) return false;
+  let index = 0;
+  for (const block of editor.editor.scrollPage.children.iterator()) {
+    if (block.blockName !== "atx-heading" && block.blockName !== "setext-heading") continue;
+    if (index++ !== target.index || !block.isParent()) continue;
+    const content = block.firstContentInDescendant();
+    if (!content) return false;
+    editor.focus();
+    const offset = block.blockName === "atx-heading" ? Math.min(target.level + 1, content.text.length) : 0;
+    content.setCursor(offset, offset, true);
+    block.domNode?.scrollIntoView({ block: "center", inline: "nearest" });
+    return true;
+  }
+  return false;
+}
+function selectAll() {
+  if (!interactive()) return;
+  if (props.sourceMode) sourceRef.value?.selectAll(); else muya.value?.selectAllDocument();
+}
+function clearUndoably() {
+  if (!interactive()) return;
+  if (props.sourceMode) sourceRef.value?.clearUndoably();
+  else if (muya.value && props.modelValue) muya.value.replaceContent("", captureMuyaSelection() ?? undefined);
+}
+async function paste() {
+  if (!interactive()) return;
+  if (document.execCommand("paste")) return;
+  const doc = props.identity.documentId, mode = props.sourceMode, currentActivation = activation.value;
+  const editor = muya.value, source = sourceRef.value;
+  const data = await readClipboardData();
+  if (!interactive() || props.identity.documentId !== doc || props.sourceMode !== mode || activation.value !== currentActivation) return;
+  if (mode && source && source === sourceRef.value) source.pasteText(data.getData("text/plain"));
+  else if (!mode && editor && editor === muya.value) await editor.editor.clipboard.pasteHandler(new ClipboardEvent("paste", { clipboardData: data }));
+}
+function search(query: string) {
+  if (!interactive()) return;
+  if (props.sourceMode) sourceRef.value?.search(query);
+  else if (muya.value) { muya.value.flush(); muya.value.search(query); }
+}
+function closeSearch() {
+  if (!interactive()) return;
+  sourceRef.value?.search("");
+  if (muya.value && !props.sourceMode) muya.value.search("", { selectHighlight: true });
+}
+function find(query: string, forward: boolean) {
+  if (!interactive() || !query) return;
+  if (props.sourceMode) {
+    if (forward) sourceRef.value?.findNext(query); else sourceRef.value?.findPrev(query);
+  } else if (muya.value) {
+    muya.value.flush();
+    if (muya.value.editor.searchModule.value !== query) {
+      muya.value.search(query);
+      if (!forward) muya.value.find("previous");
+    } else muya.value.find(forward ? "next" : "previous");
+  }
+}
+function replace(query: string, replacement: string, all: boolean) {
+  if (!interactive() || !query) return;
+  if (props.sourceMode) {
+    if (all) sourceRef.value?.replaceAll(query, replacement); else sourceRef.value?.replaceCurrent(query, replacement);
+  } else if (muya.value) {
+    muya.value.flush();
+    if (muya.value.editor.searchModule.value !== query) muya.value.search(query);
+    muya.value.replace(replacement, { isSingle: !all, isRegexp: false });
+  }
+}
+
 // Disk/recovery actions can request source mode without a user mode toggle.
 watch(() => props.sourceMode, value => { if (value && !suspended.value) sourceMounted.value = true; });
 onMounted(() => { if (props.checkpoint) void resume(); });
@@ -237,7 +352,8 @@ onBeforeUnmount(() => {
 });
 
 defineExpose({
-  flush, toggleMode, suspend, resume,
+  flush, toggleMode, suspend, resume, focus, captureView, applyView, navigateHeading,
+  selectAll, clearUndoably, paste, search, closeSearch, find, replace,
   capture: () => serialize(checkpoint, null),
   getSource: () => sourceRef.value,
   getMuya: () => muya.value,
@@ -258,7 +374,7 @@ defineExpose({
       :checkpoint="muyaCheckpoint" :document-path="documentPath" :model-value="modelValue"
       :active="!sourceMode && !suspended" :aria-hidden="sourceMode || !!suspended" :inert="sourceMode || !!suspended"
       @update:model-value="emit('update:modelValue', $event)" @ready="onReady" @restore-error="failed"
-      @selection-change="emit('selection-change', $event)" />
+      @selection-change="emit('selection-change', !!$event)" />
     <SourceEditor v-if="sourceMounted" v-show="sourceMode && !suspended" ref="sourceRef" :key="activation"
       :identity="identity" :lease="lease" :checkpoint="sourceCheckpoint" :model-value="modelValue"
       :active="sourceMode && !suspended" :aria-hidden="!sourceMode || !!suspended" :inert="!sourceMode || !!suspended"
