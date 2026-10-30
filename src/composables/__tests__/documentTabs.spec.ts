@@ -267,6 +267,40 @@ describe("multi-document workspaces", () => {
     expect(manager.tabs.value).toHaveLength(2);
   });
 
+  it("keeps both documents and allows retry if target and rollback renderers both fail", async () => {
+    const { manager, failMount } = mount();
+    await manager.actions.run("open");
+    const first = manager.activeId.value!;
+    updateText(manager, "first draft");
+    failMount.add("/one.md"); failMount.add("/two.md");
+    native.open.mockResolvedValue("/two.md");
+    expect(await manager.actions.run("open")).toBe(false);
+    expect(manager.activeId.value).toBe(first);
+    expect(manager.workspace.markdown.value).toBe("first draft");
+    expect(manager.tabs.value).toHaveLength(2);
+    const second = manager.tabs.value.find(tab => tab.path === "/two.md")!.id;
+    failMount.clear();
+    expect(await manager.activate(second)).toBe(true);
+    expect(manager.workspace.markdown.value).toBe("two");
+    expect(await manager.activate(first)).toBe(true);
+    expect(manager.workspace.markdown.value).toBe("first draft");
+  });
+
+  it("retains a dirty tab and resumes its backup after recovery cleanup fails", async () => {
+    const { manager, first, edit } = await two();
+    await edit(first.id, "draft at close");
+    expect(await manager.recovery.flush()).toBe(true);
+    const original = native.invoke.getMockImplementation()!;
+    native.invoke.mockImplementationOnce((command, args) => command === "recovery_remove"
+      ? Promise.reject(new Error("remove failed")) : original(command, args));
+    choices.push("No");
+    expect(await manager.close(first.id)).toBe(false);
+    expect(manager.tabs.value.some(tab => tab.id === first.id)).toBe(true);
+    expect(await manager.recovery.flush()).toBe(true);
+    expect(backups.get(first.id)?.content).toBe("draft at close");
+    expect(manager.workspace.markdown.value).toBe("draft at close");
+  });
+
   it("closes all atomically, preserving unread recovery records, then shows the welcome state", async () => {
     const { manager, first, second, edit } = await two(); await edit(first.id, "a"); await edit(second.id, "b");
     choices.push("No", "Cancel"); expect(await manager.actions.run("closeAll")).toBe(false); expect(manager.tabs.value).toHaveLength(2);

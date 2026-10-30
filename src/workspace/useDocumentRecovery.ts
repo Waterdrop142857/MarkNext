@@ -51,11 +51,14 @@ export function useDocumentRecovery(workspace: RecoverySource, store: RecoverySt
     if (!workspace.dirty.value) return known.has(id) ? remove(id) : queue;
     const record = snapshot();
     const signature = JSON.stringify({ ...record, updatedAt: 0 });
-    if (signatures.get(id) === signature) return queue;
+    // A failed prior write or deletion must be retried even when the last
+    // successfully written snapshot has the same signature.
+    const retry = failed.value;
+    if (signatures.get(id) === signature && !retry) return queue;
     known.add(id);
     return enqueue(async () => {
       known.add(id);
-      if (signatures.get(id) === signature) return;
+      if (signatures.get(id) === signature && !retry) return;
       await store.write(record);
       signatures.set(id, signature);
     });
