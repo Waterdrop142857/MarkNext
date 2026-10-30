@@ -25,3 +25,12 @@ it("rechecks availability, preserves explicit tab targets, and rejects unknown c
   expect(registry.execute("tabClose", "tab-a")).toBe(false);
   expect(registry.execute("toString")).toBe(false);
 });
+
+it("returns an asynchronous command result to the window close handler", async () => {
+  const noop = () => {};
+  const handlers = Object.fromEntries([...shortcutCommands.map(command => [command.id, noop]),
+    ["settings", noop], ["recovery", noop], ["reload", noop], ["overwrite", noop], ["tabClose", noop],
+    ["exit", async () => false]]) as CommandHandlers;
+  const registry = createCommandRegistry(handlers, () => true);
+  expect(await registry.execute("exit")).toBe(false);
+});

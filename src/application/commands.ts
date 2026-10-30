@@ -4,7 +4,7 @@ export type CommandId = ShortcutCommand | "settings" | "recovery" | "reload" | "
 export type CommandRequest =
   | { readonly id: Exclude<CommandId, "tabClose"> }
   | { readonly id: "tabClose"; readonly tabId: string };
-export type CommandHandlers = Record<Exclude<CommandId, "tabClose">, () => void> & { tabClose(request: { id: "tabClose"; tabId: string }): void };
+export type CommandHandlers = Record<Exclude<CommandId, "tabClose">, () => void | Promise<boolean>> & { tabClose(request: { id: "tabClose"; tabId: string }): void };
 
 /** Dispatch remains synchronous so clipboard handlers keep their user gesture. */
 export function createCommandRegistry(handlers: CommandHandlers, enabled: (request: CommandRequest) => boolean) {
@@ -17,12 +17,11 @@ export function createCommandRegistry(handlers: CommandHandlers, enabled: (reque
     const command = request(id, tabId);
     return !!command && enabled(command);
   }
-  function execute(id: string, tabId?: string): boolean {
+  function execute(id: string, tabId?: string): boolean | Promise<boolean> {
     const command = request(id, tabId);
     if (!command || !enabled(command)) return false;
-    if (command.id === "tabClose") handlers.tabClose(command);
-    else handlers[command.id]();
-    return true;
+    if (command.id === "tabClose") { handlers.tabClose(command); return true; }
+    return handlers[command.id]() ?? true;
   }
   return { canExecute, execute };
 }

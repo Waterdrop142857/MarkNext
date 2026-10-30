@@ -259,9 +259,10 @@ function toggleMenu(menuId: string) {
 function runMenuCommand(itemId: string) {
   if (commandRegistry.execute(itemId)) openMenuId.value = null;
 }
-function runTabAction(action: TabAction) {
-  void documentActions.run(action).then(done => {
-    if (done) { void nextTick(focusEditor); void checkDisk(); }
+function runTabAction(action: TabAction): Promise<boolean> {
+  return documentActions.run(action).then(done => {
+    if (done && action !== "exit") { void nextTick(focusEditor); void checkDisk(); }
+    return done;
   });
 }
 function openSettings(category: SettingsCategory) {
@@ -430,7 +431,7 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener("resize", updateViewportSize);
   window.addEventListener("keydown", handleGlobalKeydown, true);
-  void initWindowState(() => documentActions.run("exit"));
+  void initWindowState(() => Promise.resolve(commandRegistry.execute("exit")));
   void recovery.start();
 });
 
