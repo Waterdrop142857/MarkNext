@@ -43,7 +43,7 @@ beforeEach(() => {
 afterEach(() => { managers.splice(0).forEach(manager => manager.stop()); vi.useRealTimers(); });
 async function opened() { const workspace = createDocumentController(() => "utf-8", createTauriDocumentPorts()); await workspace.openFile(); return workspace; }
 function actions(workspace: ReturnType<typeof createDocumentController>) {
-  return useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: () => {}, closeWindow: async () => {} });
+  return useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: () => {} });
 }
 function manager(workspace: ReturnType<typeof createDocumentController>) {
   const value = useDocumentRecovery(workspace, createTauriDocumentPorts().recovery, { flushEditor: () => {}, getView: () => ({ scrollTop: 123 }) });

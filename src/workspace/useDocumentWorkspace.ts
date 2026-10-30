@@ -34,7 +34,7 @@ interface DocumentTab {
   recovery: ReturnType<typeof useDocumentRecovery>;
   stop(): void;
 }
-export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "previousTab";
+export type TabAction = DocumentAction | "exit" | "saveAll" | "closeAll" | "nextTab" | "previousTab";
 
 export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, host: {
   editor(): EditorLifecyclePort | null;
@@ -91,7 +91,6 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
     const flushEditor = () => { if (active.value === tab) host.editor()?.flush(); };
     tab.actions = useDocumentActions(workspace, ports.prompts, {
       flushEditor, documentName: () => name(tab),
-      closeWindow: async () => { throw new Error("Window close belongs to the tab manager"); },
     });
     tab.recovery = useDocumentRecovery(workspace, ports.recovery, {
       flushEditor,
@@ -159,7 +158,7 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
   }
   async function confirm(tab: DocumentTab) {
     if (!(await activateInternal(tab)) || !(await settle(tab))) return false;
-    return tab.actions.confirmReplacement();
+    return tab.actions.confirmAndRun();
   }
   async function closeInternal(tab: DocumentTab) {
     if (active.value === tab && !(await settle(tab))) return false;

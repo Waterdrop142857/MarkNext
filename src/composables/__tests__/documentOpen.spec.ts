@@ -3,7 +3,7 @@ import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Muya } from "../../muya";
 import { createDocumentController } from "../../document/createDocumentController";
-import { useDocumentActions } from "../useDocumentActions";
+import { useDocumentActions, type DocumentAction } from "../useDocumentActions";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), message: vi.fn(), open: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));
@@ -49,7 +49,10 @@ function harness() {
   editor.on("json-change", () => { workspace.markdown.value = editor.getMarkdown(); });
   const flush = vi.fn(() => editor.flush());
   const closeWindow = vi.fn(async () => {});
-  const actions = useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: flush, closeWindow });
+  const documentActions = useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: flush });
+  const actions = { run: (action: DocumentAction | "exit") => action === "exit"
+    ? documentActions.confirmAndRun(async () => { await closeWindow(); return true; })
+    : documentActions.run(action) };
   const read = deferred<string>();
   const reading = deferred<void>();
   native.invoke.mockImplementation((command: string) => {

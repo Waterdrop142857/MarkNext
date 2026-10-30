@@ -2,12 +2,12 @@ import type { RecoverySnapshot } from "../document/types";
 import type { DocumentActionsSource } from "../document/consumers";
 import type { DocumentPrompts } from "../document/ports";
 
-export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "exit" | "reload" | "overwrite";
+export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "reload" | "overwrite";
 
 export function useDocumentActions(
   workspace: DocumentActionsSource,
   prompts: DocumentPrompts,
-  options: { flushEditor: () => void; closeWindow: () => Promise<void>; documentName?: () => string },
+  options: { flushEditor: () => void; documentName?: () => string },
 ) {
   let pending = false;
   let lastExternalPrompt: { generation: number; version: string } | null = null;
@@ -57,17 +57,25 @@ export function useDocumentActions(
       switch (action) {
         case "new": workspace.newFile(); break;
         case "close": workspace.closeFile(); break;
-        case "exit": await options.closeWindow(); break;
       }
       return true;
     }
     catch (error) {
-      await prompts.error(action === "exit" ? "closeWindow" : "fileAction", error);
+      await prompts.error("fileAction", error);
       return false;
     }
     finally {
       pending = false;
     }
+  }
+
+  /** Run a caller-owned operation under the same confirmation and busy guard. */
+  async function confirmAndRun(operation: () => Promise<boolean> = async () => true): Promise<boolean> {
+    if (pending) return false;
+    pending = true;
+    try { return await confirmReplacement() && await operation(); }
+    catch (error) { await prompts.error("fileAction", error); return false; }
+    finally { pending = false; }
   }
 
   async function restore(record: RecoverySnapshot): Promise<boolean> {
@@ -105,5 +113,5 @@ export function useDocumentActions(
     finally { pending = false; }
   }
 
-  return { run, restore, reviewExternalChange, confirmReplacement, isPending: () => pending };
+  return { run, restore, reviewExternalChange, confirmAndRun, isPending: () => pending };
 }

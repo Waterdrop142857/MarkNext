@@ -39,7 +39,7 @@ it("uses the injected prompt and leaves the document untouched when replacement 
   ports.prompts.unsaved = vi.fn().mockResolvedValue("cancel");
   const workspace = createDocumentController(() => "utf-8", ports);
   workspace.newFile(); workspace.markdown.value = "unsaved";
-  const actions = useDocumentActions(workspace, ports.prompts, { flushEditor() {}, closeWindow: async () => {} });
+  const actions = useDocumentActions(workspace, ports.prompts, { flushEditor() {} });
   expect(await actions.run("new")).toBe(false);
   expect(ports.prompts.unsaved).toHaveBeenCalledOnce();
   expect(workspace.markdown.value).toBe("unsaved");

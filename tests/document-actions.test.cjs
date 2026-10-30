@@ -106,10 +106,15 @@ function harness(choices = ['不保存'], options = {}) {
   const { useDocumentActions } = loadModule('src/composables/useDocumentActions.ts', {
     '../services/dialogs': dialogs,
   });
-  const actions = useDocumentActions(workspace, ports.prompts, {
+  const documentActions = useDocumentActions(workspace, ports.prompts, {
     flushEditor: () => options.flush?.(workspace),
-    closeWindow: chrome.destroyWindow,
   });
+  const actions = { run: action => action === 'exit'
+    ? documentActions.confirmAndRun(async () => {
+      try { await chrome.destroyWindow(); return true; }
+      catch (error) { await ports.prompts.error('closeWindow', error); return false; }
+    })
+    : documentActions.run(action) };
   return {
     workspace, actions, disk, prompts, errors,
     destroyed: () => destroyed,
