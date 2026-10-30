@@ -2,17 +2,17 @@ mod codec;
 pub(crate) mod commands;
 pub(crate) mod images;
 mod io;
+mod paths;
 
 use codec::{content_version, decode_document};
 pub(crate) use codec::{encode_document, FileEncoding, ReadDocument};
 #[cfg(test)]
 use images::image_file_path;
 pub(crate) use io::{atomic_write, FileError};
-use io::{
-    canonical_document_path_sync, disk_stamp, file_version_sync, read_file_sync, write_file_sync,
-};
 #[cfg(test)]
 use io::{checked_atomic_write, TEMP_FILE_SEQUENCE};
+use io::{disk_stamp, file_version_sync, read_file_sync, write_file_sync};
+use paths::{canonical_document_path_sync, resolved_write_path};
 
 #[cfg(test)]
 mod tests {
