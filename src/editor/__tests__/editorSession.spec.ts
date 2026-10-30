@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => { cleanup.splice(0).reverse().forEach(stop => stop()); document.body.replaceChildren(); engines.length = 0; vi.restoreAllMocks(); });
 
 async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, options: Partial<IMuyaOptions> = {}) {
-  const markdown = ref(text), sourceMode = ref(false), revision = ref(checkpoint?.active.revision ?? 0);
+  const markdown = ref(text), sourceMode = ref(false), revision = ref(checkpoint?.active.revision ?? 0), generation = ref(1);
   const stop = watch(markdown, () => { revision.value++; }, { flush: "sync" });
   const identity = computed(() => ({ documentId: "doc-a", revision: revision.value }));
   const session = ref<InstanceType<typeof EditorSession> | null>(null);
@@ -26,7 +26,7 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
   const availability: boolean[] = [];
   const host = document.createElement("main"); document.body.appendChild(host);
   const app = createApp({ render: () => h(EditorSession, {
-    ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value, generation: 1, documentPath: null, options, checkpoint,
+    ref: session, modelValue: markdown.value, sourceMode: sourceMode.value, identity: identity.value, generation: generation.value, documentPath: null, options, checkpoint,
     onDocumentChange: (event: { value: string }) => { markdown.value = event.value; },
     onModeChange: (event: { value: boolean }) => { sourceMode.value = event.value; },
     onAvailability: (event: { value: boolean }) => { availability.push(event.value); }, onError: error => errors.push(error),
@@ -35,7 +35,7 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
   cleanup.push(() => { app.unmount(); stop(); expect(errors).toEqual([]); });
   const source = () => (host.querySelector(".CodeMirror") as HTMLElement & { CodeMirror: CodeMirror.Editor }).CodeMirror;
   const getMuya = () => [...engines].reverse().find(editor => host.contains(editor.domNode)) ?? null;
-  return { session, markdown, sourceMode, revision, host, source, getMuya, availability, unmount: () => app.unmount() };
+  return { session, markdown, sourceMode, revision, generation, host, source, getMuya, availability, unmount: () => app.unmount() };
 }
 
 describe("editor session lifecycle", () => {
@@ -171,6 +171,25 @@ describe("editor session lifecycle", () => {
       expect(await session.value!.suspend()).not.toBeNull();
       expect(await session.value!.resume()).toBe(true);
       finish({ getData: () => "wrong document" } as unknown as DataTransfer);
+      await pasting;
+      expect(source().getValue()).toBe("start");
+    } finally {
+      if (original) Object.defineProperty(document, "execCommand", original);
+      else Reflect.deleteProperty(document, "execCommand");
+    }
+  });
+
+  it("rejects clipboard data if the document generation changes during the read", async () => {
+    const { session, source, generation } = await mount("start");
+    expect(await session.value!.toggleMode()).toBe(true);
+    let finish!: (data: DataTransfer) => void;
+    vi.spyOn(clipboard, "readClipboardData").mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const original = Object.getOwnPropertyDescriptor(document, "execCommand");
+    Object.defineProperty(document, "execCommand", { configurable: true, value: () => false });
+    try {
+      const pasting = session.value!.paste();
+      generation.value++; await nextTick();
+      finish({ getData: () => "stale" } as unknown as DataTransfer);
       await pasting;
       expect(source().getValue()).toBe("start");
     } finally {

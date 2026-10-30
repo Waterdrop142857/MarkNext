@@ -268,10 +268,11 @@ function clearUndoably() {
 async function paste() {
   if (!interactive()) return;
   if (document.execCommand("paste")) return;
-  const doc = props.identity.documentId, mode = props.sourceMode, currentActivation = activation.value;
+  const doc = props.identity.documentId, generation = props.generation, mode = props.sourceMode, currentActivation = activation.value;
   const editor = muya.value, source = sourceRef.value;
   const data = await readClipboardData();
-  if (!interactive() || props.identity.documentId !== doc || props.sourceMode !== mode || activation.value !== currentActivation) return;
+  if (!interactive() || props.identity.documentId !== doc || props.generation !== generation
+    || props.sourceMode !== mode || activation.value !== currentActivation) return;
   if (mode && source && source === sourceRef.value) sourceCommands.paste(data);
   else if (!mode && editor && editor === muya.value) await muyaCommands.paste(data);
 }
