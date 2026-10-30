@@ -25,6 +25,7 @@ import { useWindowChrome } from "./composables/useWindowChrome";
 import { useTheme } from "./composables/useTheme";
 import { useShortcuts } from "./composables/useShortcuts";
 import { createShortcutHandler } from "./services/shortcutHandler";
+import { useDocumentMonitoring } from "./application/useDocumentMonitoring";
 import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
@@ -201,22 +202,14 @@ async function discardRecovery(record: RecoverySnapshot) {
   finally { recoveryBusy.value = false; }
 }
 
-let safetyTimer: ReturnType<typeof setInterval> | undefined;
-let checkingDisk = false;
-async function checkDisk() {
-  if (checkingDisk || document.hidden || documentActions.isPending()) return;
-  checkingDisk = true;
-  try {
-    flushEditor();
-    const changed = await workspace.checkExternalChange();
-    if (changed && !settingsOpen.value && !recoveryOpen.value) await reloadDocument(true);
-  }
-  finally { checkingDisk = false; }
-}
-function handleVisibility() {
-  if (document.hidden) void recovery.flush();
-  else void checkDisk();
-}
+const { checkDisk } = useDocumentMonitoring({
+  busy: () => documentActions.isPending(),
+  flushEditor,
+  checkExternalChange: workspace.checkExternalChange,
+  canReview: () => !settingsOpen.value && !recoveryOpen.value,
+  reviewExternalChange: () => reloadDocument(true),
+  flushRecovery: recovery.flush,
+});
 
 watch(documentGeneration, () => {
   activeHeading.value = null;
@@ -493,19 +486,11 @@ onMounted(() => {
   window.addEventListener("keydown", handleGlobalKeydown, true);
   void initWindowState(() => documentActions.run("exit"));
   void recovery.start();
-  window.addEventListener("focus", checkDisk);
-  window.addEventListener("blur", recovery.flush);
-  document.addEventListener("visibilitychange", handleVisibility);
-  safetyTimer = setInterval(() => { void checkDisk(); }, 5000);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", updateViewportSize);
   window.removeEventListener("keydown", handleGlobalKeydown, true);
-  window.removeEventListener("focus", checkDisk);
-  window.removeEventListener("blur", recovery.flush);
-  document.removeEventListener("visibilitychange", handleVisibility);
-  clearInterval(safetyTimer);
   void recovery.flush();
   recovery.stop();
 });
