@@ -45,11 +45,11 @@ const lease = computed(() => ({ documentId: props.identity.documentId, activatio
 let bridge: MuyaCheckpoint | null = null;
 let sourceTextAtEntry = props.modelValue;
 let disposed = false;
-let composing = false;
+const composing = ref(false);
 let restoreError: unknown = null;
 let compositionTimer: ReturnType<typeof setTimeout> | undefined;
 let queue: Promise<unknown> = Promise.resolve();
-let transitioning = false;
+const transitioning = ref(false);
 const waiting = new Set<(ready: boolean) => void>();
 const taskWaiting = new Set<(ready: boolean) => void>();
 
@@ -57,16 +57,18 @@ function editorEvent<T>(value: T): EditorEvent<T> {
   return { documentId: props.identity.documentId, generation: props.generation, value };
 }
 function onReady(value: Muya) { muya.value = value; }
-const ready = computed(() => !suspended.value && (props.sourceMode ? !!sourceRef.value : !!muya.value));
+const ready = computed(() => !suspended.value && !composing.value && !transitioning.value
+  && (props.sourceMode ? !!sourceRef.value : !!muya.value));
 watch(ready, value => emit("ready", editorEvent(value)), { immediate: true });
 function failed(error: unknown) { restoreError = error; emit("error", error); }
+function compositionStart() { composing.value = true; }
 function compositionEnd() {
-  composing = false;
+  composing.value = false;
   // compositionend may precede the final input event. Yield one task before
   // flushing, without inventing a composition event or losing IME text.
   clearTimeout(compositionTimer);
   compositionTimer = setTimeout(() => {
-    if (composing) return;
+    if (composing.value) return;
     for (const resolve of waiting) resolve(!disposed);
     waiting.clear();
   }, 0);
@@ -75,7 +77,7 @@ function compositionEnd() {
 function serialize<T>(operation: () => Promise<T>, cancelled: T): Promise<T> {
   const task = queue.then(async () => {
     if (disposed) return cancelled;
-    if (composing && !(await new Promise<boolean>(resolve => waiting.add(resolve)))) return cancelled;
+    if (composing.value && !(await new Promise<boolean>(resolve => waiting.add(resolve)))) return cancelled;
     const editor = muya.value;
     if (editor?.busy && !(await new Promise<boolean>(resolve => {
       const finish = (ready: boolean) => { editor.off("async-idle", idle); taskWaiting.delete(finish); resolve(ready); };
@@ -84,9 +86,9 @@ function serialize<T>(operation: () => Promise<T>, cancelled: T): Promise<T> {
       if (!editor.busy) finish(true);
     }))) return cancelled;
     if (disposed) return cancelled;
-    transitioning = true;
+    transitioning.value = true;
     try { return await operation(); }
-    finally { transitioning = false; }
+    finally { transitioning.value = false; }
   });
   queue = task.catch(() => undefined);
   return task;
@@ -236,7 +238,7 @@ async function toggleMode(): Promise<boolean> {
 // The session owns lifetime and mode checks; engine adapters own their details.
 const muyaCommands = createMuyaCommands(() => muya.value);
 const sourceCommands = createSourceCommands(() => sourceRef.value);
-function interactive() { return !disposed && !transitioning && !composing && !suspended.value; }
+function interactive() { return !disposed && !transitioning.value && !composing.value && !suspended.value; }
 function focus() {
   if (!interactive()) return;
   if (props.sourceMode) sourceCommands.focus(); else muyaCommands.focus();
@@ -309,18 +311,18 @@ defineExpose({
   selectAll, clearUndoably, paste, search, closeSearch, find, replace,
   capture: () => serialize(checkpoint, null),
   undo: () => {
-    if (disposed || transitioning || composing || suspended.value) return false;
+    if (disposed || transitioning.value || composing.value || suspended.value) return false;
     return (props.sourceMode ? sourceRef.value?.getHistoryAdapter()?.undo() : muyaRef.value?.getHistoryAdapter()?.undo()) ?? false;
   },
   redo: () => {
-    if (disposed || transitioning || composing || suspended.value) return false;
+    if (disposed || transitioning.value || composing.value || suspended.value) return false;
     return (props.sourceMode ? sourceRef.value?.getHistoryAdapter()?.redo() : muyaRef.value?.getHistoryAdapter()?.redo()) ?? false;
   },
 });
 </script>
 
 <template>
-  <div class="editor-session" @compositionstart.capture="composing = true" @compositionend.capture="compositionEnd">
+  <div class="editor-session" @compositionstart.capture="compositionStart" @compositionend.capture="compositionEnd">
     <MuyaEditor v-if="muyaMounted" ref="muyaRef" :key="activation" :options="options" :identity="identity" :lease="lease"
       :checkpoint="muyaCheckpoint" :document-path="documentPath" :model-value="modelValue"
       :active="!sourceMode && !suspended" :aria-hidden="sourceMode || !!suspended" :inert="sourceMode || !!suspended"
