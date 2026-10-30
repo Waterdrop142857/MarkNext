@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => { cleanups.splice(0).reverse().forEach(cleanup => cleanup()); vi.restoreAllMocks(); });
 
-function mount() {
+function mount(prepareEditor?: () => Promise<void>) {
   const scope = effectScope();
   let manager!: ReturnType<typeof useDocumentTabs>;
   const mounted: string[] = [], suspended: string[] = [];
@@ -58,6 +58,7 @@ function mount() {
     resume: async () => { mounted.push(manager.active.value!.id); return !failMount.has(manager.active.value!.workspace.currentFilePath.value ?? ""); },
   };
   manager = scope.run(() => useDocumentTabs(() => "utf-8", {
+    prepareEditor,
     editor: () => manager.active.value ? renderer : null,
     getView: () => ({ scrollTop: 42 }),
     closeWindow: async () => {
@@ -78,6 +79,30 @@ async function two() {
 }
 
 describe("multi-document workspaces", () => {
+  it("waits for a lazy editor before mounting a tab, without blocking the outer shell", async () => {
+    let ready!: () => void;
+    const { manager, mounted } = mount(() => new Promise(resolve => { ready = resolve; }));
+    const opening = manager.actions.run("new");
+    await vi.waitFor(() => expect(ready).toBeTypeOf("function"));
+    expect(manager.busy.value).toBe(true);
+    expect(manager.active.value).toBeNull();
+    expect(mounted).toEqual([]);
+    ready();
+    expect(await opening).toBe(true);
+    expect(mounted).toHaveLength(1);
+    expect(manager.documents.value).toHaveLength(1);
+  });
+
+  it("retains a document after a failed lazy import and allows retrying its tab", async () => {
+    const prepare = vi.fn().mockRejectedValueOnce(new Error("module unavailable")).mockResolvedValue(undefined);
+    const { manager } = mount(prepare);
+    expect(await manager.actions.run("new")).toBe(false);
+    expect(manager.active.value).toBeNull();
+    expect(manager.documents.value).toHaveLength(1);
+    expect(await manager.activate(manager.documents.value[0].id)).toBe(true);
+    expect(manager.active.value).toBe(manager.documents.value[0]);
+  });
+
   it("creates tabs without replacing dirty content, preserving identity, mode and pure checkpoints", async () => {
     const { manager, suspended } = mount();
     expect(await manager.actions.run("new")).toBe(true);

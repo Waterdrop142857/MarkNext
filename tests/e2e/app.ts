@@ -10,6 +10,7 @@ export interface NativeFixture {
   notifications: string[];
   openRequests: { id: number; paths: string[] }[];
   openRequestAcks: number[];
+  startupReady: { generation: number; dark: boolean }[];
   deliverFiles(paths: string[]): Promise<void>;
   savePath: string;
   allowedImages: string[];
@@ -35,7 +36,7 @@ let completeRead: (() => void) | null = null;
 const fixture: NativeFixture = {
   openPath: "/old.md", disk: JSON.parse(localStorage.getItem("test-disk") ?? '{"/old.md":"original","/new.md":"replacement"}'),
   savePath: "/saved.md", allowedImages: [], pathAliases: {}, notifications: [],
-  openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [],
+  openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [], startupReady: [],
   async deliverFiles(paths) {
     const id = Math.max(0, ...fixture.openRequests.map(request => request.id), ...fixture.openRequestAcks) + 1;
     fixture.openRequests.push({ id, paths });
@@ -58,6 +59,8 @@ const internals: { convertFileSrc: (path: string) => string } = Reflect.get(wind
 internals.convertFileSrc = path => `/tests/e2e/fixtures/pixel.svg?path=${encodeURIComponent(path)}`;
 mockIPC((command, args) => {
   const payload = args && !Array.isArray(args) && !(args instanceof ArrayBuffer) && !(args instanceof Uint8Array) ? args : {};
+  if (command === "startup_generation") return 1;
+  if (command === "startup_ready") { fixture.startupReady.push({ generation: Number(payload.generation), dark: Boolean(payload.dark) }); return; }
   if (command === "pending_open_requests") return structuredClone(fixture.openRequests);
   if (command === "acknowledge_open_request") {
     fixture.openRequestAcks.push(Number(payload.id));

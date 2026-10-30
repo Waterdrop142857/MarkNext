@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import MuyaEditor from "./MuyaEditor.vue";
 import SourceEditor from "./SourceEditor.vue";
+import "../styles/muya-editor.css";
+import "../styles/source-editor.css";
 import type { Muya, IMuyaOptions } from "../muya";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { DocumentRevision, EditorSessionCheckpoint, MuyaCheckpoint, SourceCheckpoint } from "../editor/sessionTypes";

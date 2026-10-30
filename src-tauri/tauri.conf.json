@@ -18,7 +18,9 @@
         "minWidth": 800,
         "minHeight": 600,
         "decorations": false,
-        "label": "main"
+        "label": "main",
+        "visible": false,
+        "backgroundColor": "#1e1e1e"
       }
     ],
     "security": {

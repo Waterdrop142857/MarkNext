@@ -32,6 +32,7 @@ export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "p
 
 export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
   editor(): SessionPort | null;
+  prepareEditor?(): Promise<void>;
   getView(): RecoveryView;
   applyView?(view: RecoveryView | undefined, sourceMode: boolean): void;
   closeWindow(): Promise<void>;
@@ -106,6 +107,9 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
   }
 
   async function mount(tab: DocumentTab | null) {
+    try { if (tab) await host.prepareEditor?.(); }
+    catch (error) { if (!stopped) await showError(t("error.fileAction"), error); return false; }
+    if (stopped) return false;
     active.value = tab;
     generation.value++;
     await nextTick();

@@ -494,6 +494,27 @@ pub fn run() {
         window_instance::deliver(app, paths);
     }));
     builder
+        .on_page_load(|webview, payload| {
+            if webview.label() == window_instance::MAIN_WINDOW
+                && payload.event() == tauri::webview::PageLoadEvent::Started
+            {
+                window_instance::begin_startup(webview.app_handle());
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() == window_instance::MAIN_WINDOW
+                && matches!(event, tauri::WindowEvent::CloseRequested { .. })
+            {
+                window
+                    .state::<window_instance::WindowInstance>()
+                    .cancel_failed_startup_requests();
+            }
+            if window.label() == window_instance::MAIN_WINDOW
+                && matches!(event, tauri::WindowEvent::Destroyed)
+            {
+                window_instance::invalidate_startup(window.app_handle());
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -508,6 +529,8 @@ pub fn run() {
             recovery::recovery_remove,
             window_instance::pending_open_requests,
             window_instance::acknowledge_open_request,
+            window_instance::startup_generation,
+            window_instance::startup_ready,
             open_devtools
         ])
         .build(tauri::generate_context!())

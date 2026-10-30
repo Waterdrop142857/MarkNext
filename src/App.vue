@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import EditorSession from "./components/EditorSession.vue";
+import type EditorSessionComponent from "./components/EditorSession.vue";
 import TitleBar from "./components/TitleBar.vue";
 import MenuBar from "./components/MenuBar.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -32,8 +32,17 @@ import type { IHistorySelection } from "./muya/selection/types";
 
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
+const EditorSession = shallowRef<typeof EditorSessionComponent | null>(null);
+let editorLoading: Promise<void> | null = null;
+function prepareEditor(): Promise<void> {
+  if (EditorSession.value) return Promise.resolve();
+  return editorLoading ??= import("./components/EditorSession.vue").then(module => {
+    EditorSession.value = module.default;
+  }).finally(() => { editorLoading = null; });
+}
 const documentTabs = useDocumentTabs(() => preferences.value.defaultEncoding, {
   editor: () => editorSessionRef.value,
+  prepareEditor,
   getView: captureView,
   applyView,
   closeWindow: async () => {
@@ -148,7 +157,7 @@ watch([
 const openMenuId = ref<string | null>(null);
 const contextMenu = ref<{ x: number; y: number; items: FluentMenuItem[]; tabId?: string } | null>(null);
 const muyaEditor = shallowRef<Muya | null>(null);
-const editorSessionRef = ref<InstanceType<typeof EditorSession> | null>(null);
+const editorSessionRef = ref<InstanceType<typeof EditorSessionComponent> | null>(null);
 const sourceEditorRef = computed(() => editorSessionRef.value?.getSource() ?? null);
 const editorIdentity = documentTabs.identity;
 const editorCheckpoint = documentTabs.checkpoint;
@@ -751,7 +760,8 @@ onBeforeUnmount(() => {
           <p>{{ t('document.empty') }}</p>
           <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
         </div>
-        <EditorSession
+        <component
+          :is="EditorSession"
           v-else
           :key="documentGeneration"
           ref="editorSessionRef"
