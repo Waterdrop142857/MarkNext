@@ -323,6 +323,7 @@ export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, por
   async function startRecovery() {
     await catalog.start();
     if (stopped) return;
+    catalog.markReady();
     await Promise.all(documents.value.map(tab => tab.recovery.start({ records: [], unreadable: 0 })));
   }
   async function flushRecovery() {

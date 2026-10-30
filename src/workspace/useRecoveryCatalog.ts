@@ -25,11 +25,12 @@ export function useRecoveryCatalog(store: RecoveryStore, openIds: () => readonly
       unreadable.value = listing.unreadable;
       failed.value = false;
     } catch { failed.value = true; }
-    if (!stopped()) ready.value = true;
   }
+  function markReady() { if (!stopped()) ready.value = true; }
   function remove(id: string): Promise<boolean> {
     if (isOpen(id)) return Promise.resolve(false);
     const operation = queue.then(async () => {
+      if (isOpen(id)) return false;
       try {
         await store.remove(id);
         retire(id);
@@ -40,5 +41,5 @@ export function useRecoveryCatalog(store: RecoveryStore, openIds: () => readonly
     queue = operation;
     return operation;
   }
-  return { records, unreadable, failed, ready, start, remove, retire };
+  return { records, unreadable, failed, ready, start, markReady, remove, retire };
 }
