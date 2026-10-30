@@ -2,16 +2,20 @@ import { computed, createApp, h, nextTick, ref, watch } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type CodeMirror from "codemirror";
 import type { IMuyaOptions } from "../../muya/types";
+import { Muya } from "../../muya";
 import EditorSession from "../../components/EditorSession.vue";
 import type { EditorSessionCheckpoint } from "../sessionTypes";
 import * as clipboard from "../../services/clipboard";
 
 const cleanup: (() => void)[] = [];
+const engines: Muya[] = [];
 beforeEach(() => {
+  const init = Muya.prototype.init;
+  vi.spyOn(Muya.prototype, "init").mockImplementation(function (this: Muya) { engines.push(this); return init.call(this); });
   vi.spyOn(Range.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 10, 18));
   vi.spyOn(Range.prototype, "getClientRects").mockReturnValue([] as unknown as DOMRectList);
 });
-afterEach(() => { cleanup.splice(0).reverse().forEach(stop => stop()); document.body.replaceChildren(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup.splice(0).reverse().forEach(stop => stop()); document.body.replaceChildren(); engines.length = 0; vi.restoreAllMocks(); });
 
 async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, options: Partial<IMuyaOptions> = {}) {
   const markdown = ref(text), sourceMode = ref(false), revision = ref(checkpoint?.active.revision ?? 0);
@@ -28,13 +32,14 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
   app.mount(host); await nextTick();
   cleanup.push(() => { app.unmount(); stop(); expect(errors).toEqual([]); });
   const source = () => (host.querySelector(".CodeMirror") as HTMLElement & { CodeMirror: CodeMirror.Editor }).CodeMirror;
-  return { session, markdown, sourceMode, revision, host, source, unmount: () => app.unmount() };
+  const getMuya = () => [...engines].reverse().find(editor => host.contains(editor.domNode)) ?? null;
+  return { session, markdown, sourceMode, revision, host, source, getMuya, unmount: () => app.unmount() };
 }
 
 describe("editor session lifecycle", () => {
   it("destroys and reconstructs a WYSIWYG renderer with pending edits and both history stacks", async () => {
-    const { session, markdown, host } = await mount("start");
-    const editor = session.value!.getMuya()!;
+    const { session, markdown, host, getMuya } = await mount("start");
+    const editor = getMuya()!;
     editor.replaceContent("# Edited\n\n- item"); editor.flush(); await nextTick();
     editor.replaceContent("final"); editor.flush(); await nextTick();
     session.value!.undo(); await nextTick();
@@ -46,7 +51,7 @@ describe("editor session lifecycle", () => {
     const resuming = session.value!.resume();
     await nextTick(); expect(session.value!.undo()).toBe(false);
     expect(await resuming).toBe(true);
-    const restored = session.value!.getMuya()!;
+    const restored = getMuya()!;
     expect(restored).not.toBe(editor); expect(restored.getState()).toEqual(expected);
     expect(restored.getHistory().stack).toEqual(history.stack);
     expect(markdown.value).toBe(content);
@@ -55,8 +60,8 @@ describe("editor session lifecycle", () => {
   });
 
   it("suspends source mode with its bridge and commits it as one Muya step after reconstruction", async () => {
-    const { session, sourceMode, source, markdown, host } = await mount("start");
-    session.value!.getMuya()!.replaceContent("before source"); session.value!.flush(); await nextTick();
+    const { session, sourceMode, source, markdown, host, getMuya } = await mount("start");
+    getMuya()!.replaceContent("before source"); session.value!.flush(); await nextTick();
     expect(await session.value!.toggleMode()).toBe(true);
     source().replaceRange(" source one", { line: 0, ch: source().getLine(0).length });
     source().getDoc().changeGeneration(true);
@@ -84,7 +89,7 @@ describe("editor session lifecycle", () => {
 
   it.each([false, true])("restores a portable checkpoint after the whole session component is destroyed: source=%s", async sourceMode => {
     const first = await mount("start");
-    first.session.value!.getMuya()!.replaceContent("before source"); first.session.value!.flush(); await nextTick();
+    first.getMuya()!.replaceContent("before source"); first.session.value!.flush(); await nextTick();
     if (sourceMode) {
       await first.session.value!.toggleMode(); first.source().replaceRange("source ", { line: 0, ch: 0 }); await nextTick();
     }
@@ -102,17 +107,17 @@ describe("editor session lifecycle", () => {
 
   it("keeps document content authoritative when generic options contain a different document", async () => {
     const first = await mount("start");
-    first.session.value!.getMuya()!.replaceContent("edited"); first.session.value!.flush(); await nextTick();
+    first.getMuya()!.replaceContent("edited"); first.session.value!.flush(); await nextTick();
     const checkpoint = await first.session.value!.suspend();
     first.unmount();
     const second = await mount("edited", checkpoint!, { markdown: "wrong", json: [{ name: "paragraph", text: "wrong" }] });
-    await vi.waitFor(() => expect(second.session.value!.getMuya()?.getMarkdown().trim()).toBe("edited"));
+    await vi.waitFor(() => expect(second.getMuya()?.getMarkdown().trim()).toBe("edited"));
     expect(await second.session.value!.resume()).toBe(true);
     second.session.value!.undo(); await nextTick(); expect(second.markdown.value.trim()).toBe("start");
   });
 
   it("waits for composition and serializes rapid mode requests without adding an empty source commit", async () => {
-    const { session, sourceMode, host } = await mount("start");
+    const { session, sourceMode, host, getMuya } = await mount("start");
     const root = host.querySelector(".mu-editor")!;
     root.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
     let finished = false;
@@ -121,14 +126,14 @@ describe("editor session lifecycle", () => {
     root.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
     expect(await switching).toBe(true);
     expect(await session.value!.toggleMode()).toBe(true);
-    const before = session.value!.getMuya()!.getHistory().stack;
+    const before = getMuya()!.getHistory().stack;
     expect(await Promise.all([session.value!.toggleMode(), session.value!.toggleMode()])).toEqual([true, true]);
-    expect(sourceMode.value).toBe(false); expect(session.value!.getMuya()!.getHistory().stack).toEqual(before);
+    expect(sourceMode.value).toBe(false); expect(getMuya()!.getHistory().stack).toEqual(before);
   });
 
   it("waits for asynchronous document edits before committing a checkpoint", async () => {
-    const { session, markdown } = await mount("start");
-    const editor = session.value!.getMuya()!;
+    const { session, markdown, getMuya } = await mount("start");
+    const editor = getMuya()!;
     let finish!: () => void;
     const task = editor.trackTask(async () => {
       await new Promise<void>(resolve => { finish = resolve; });

@@ -4,7 +4,8 @@ import MuyaEditor from "./MuyaEditor.vue";
 import SourceEditor from "./SourceEditor.vue";
 import "../styles/muya-editor.css";
 import "../styles/source-editor.css";
-import type { Muya, IMuyaOptions } from "../muya";
+import type { Muya } from "../muya";
+import type { EditorAppearance } from "../editor/editorPort";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { DocumentRevision, EditorSessionCheckpoint, MuyaCheckpoint, SourceCheckpoint } from "../editor/sessionTypes";
 import { cloneData, decodeSessionCheckpoint, freezeData, matchesRevision } from "../editor/checkpointCodec";
@@ -17,14 +18,14 @@ const props = defineProps<{
   sourceMode: boolean;
   identity: DocumentRevision;
   documentPath: string | null;
-  options: Partial<IMuyaOptions>;
+  options: Partial<EditorAppearance>;
   checkpoint?: EditorSessionCheckpoint | null;
 }>();
 const emit = defineEmits<{
   (event: "update:modelValue", value: string): void;
   (event: "update:sourceMode", value: boolean): void;
   (event: "ready", value: boolean): void;
-  (event: "selection-change", value: unknown): void;
+  (event: "selection-change", value: boolean): void;
   (event: "error", error: unknown): void;
 }>();
 
@@ -355,8 +356,6 @@ defineExpose({
   flush, toggleMode, suspend, resume, focus, captureView, applyView, navigateHeading,
   selectAll, clearUndoably, paste, search, closeSearch, find, replace,
   capture: () => serialize(checkpoint, null),
-  getSource: () => sourceRef.value,
-  getMuya: () => muya.value,
   undo: () => {
     if (disposed || transitioning || composing || suspended.value) return false;
     return (props.sourceMode ? sourceRef.value?.getHistoryAdapter()?.undo() : muyaRef.value?.getHistoryAdapter()?.undo()) ?? false;

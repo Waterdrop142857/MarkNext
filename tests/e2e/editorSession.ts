@@ -2,6 +2,7 @@
 import { computed, createApp, h, nextTick, ref, shallowRef, watch } from "vue";
 import type CodeMirror from "codemirror";
 import EditorSession from "../../src/components/EditorSession.vue";
+import { Muya } from "../../src/muya";
 import type { EditorSessionCheckpoint } from "../../src/editor/sessionTypes";
 import "../../src/styles.css";
 import "../../src/styles/ui-controls.css";
@@ -16,11 +17,15 @@ const identity = computed(() => ({ documentId: "fixture-doc", revision: revision
 const errors: string[] = [];
 watch(markdown, () => { revision.value++; }, { flush: "sync" });
 let saved: EditorSessionCheckpoint | null = null;
-let oldEditor: ReturnType<NonNullable<typeof session.value>["getMuya"]> = null;
+const engines: Muya[] = [];
+const originalInit = Muya.prototype.init;
+Muya.prototype.init = function () { engines.push(this); return originalInit.call(this); };
+const activeEditor = () => [...engines].reverse().find(editor => editor.domNode.isConnected) ?? null;
+let oldEditor: Muya | null = null;
 
 const fixture = {
   async suspend() {
-    oldEditor = session.value?.getMuya() ?? null;
+    oldEditor = activeEditor();
     saved = await session.value!.suspend();
     return saved !== null;
   },
@@ -35,7 +40,7 @@ const fixture = {
     mounted.value = true; await nextTick();
   },
   async replace(text: string) {
-    session.value!.getMuya()!.replaceContent(text); session.value!.flush(); await nextTick();
+    activeEditor()!.replaceContent(text); session.value!.flush(); await nextTick();
   },
   state: () => ({ markdown: markdown.value, sourceMode: sourceMode.value, revision: revision.value, errors,
     oldEvents: oldEditor?.eventCenter.events.length ?? 0, oldListeners: Object.keys(oldEditor?.eventCenter.listeners ?? {}).length,
