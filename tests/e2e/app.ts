@@ -12,6 +12,7 @@ export interface NativeFixture {
   openRequestAcks: number[];
   startupReady: { generation: number; dark: boolean }[];
   deliverFiles(paths: string[]): Promise<void>;
+  requestWindowClose(): Promise<void>;
   savePath: string;
   allowedImages: string[];
   disk: Record<string, string>;
@@ -42,6 +43,7 @@ const fixture: NativeFixture = {
     fixture.openRequests.push({ id, paths });
     await emit("open-files-available");
   },
+  async requestWindowClose() { await emit("tauri://close-requested"); },
   choices: [], prompts: [], promptButtons: [], dialogTitles: [], errors: [], reads: [], writes: [], writeFormats: [], fileFormats: {}, delayReads: false,
   readPending: false, destroyed: false, recovery: JSON.parse(localStorage.getItem("test-recovery") ?? "{}"),
   finishRead() {

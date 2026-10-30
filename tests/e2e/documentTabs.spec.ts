@@ -132,6 +132,18 @@ test("exit cancellation after an earlier discard keeps every tab and backup", as
   expect(await page.evaluate(() => Object.values(window.nativeFixture.recovery))).toEqual([]);
 });
 
+test("native close requests use the shared unsaved-document command", async ({ page }) => {
+  await open(page, "/one.md", "first");
+  await page.locator(".mu-editor").click(); await page.keyboard.press("Control+End"); await page.keyboard.insertText(" draft");
+  await expect(page.locator(".tab-dirty")).toHaveCount(1);
+  await page.evaluate(async () => { window.nativeFixture.choices.push("Cancel"); await window.nativeFixture.requestWindowClose(); });
+  await expect.poll(() => page.evaluate(() => window.nativeFixture.prompts.length)).toBe(1);
+  expect(await page.evaluate(() => window.nativeFixture.destroyed)).toBe(false);
+  await expect(page.locator(".mu-editor")).toContainText("draft");
+  await page.evaluate(async () => { window.nativeFixture.choices.push("No"); await window.nativeFixture.requestWindowClose(); });
+  await expect.poll(() => page.evaluate(() => window.nativeFixture.destroyed)).toBe(true);
+});
+
 test("tab keyboard navigation and many long file names scroll inside the strip without moving chrome", async ({ page }) => {
   await page.evaluate(() => {
     const f = window.nativeFixture;
