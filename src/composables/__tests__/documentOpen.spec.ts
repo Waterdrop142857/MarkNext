@@ -1,3 +1,4 @@
+import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Muya } from "../../muya";
@@ -42,13 +43,13 @@ function harness() {
   const editor = new Muya(host, { markdown: "original" });
   editor.init();
   editors.push(editor);
-  const workspace = useWorkspace();
+  const workspace = useWorkspace(() => "utf-8", createTauriDocumentPorts());
   workspace.currentFilePath.value = "/old.md";
   workspace.markdown.value = workspace.savedMarkdown.value = editor.getMarkdown();
   editor.on("json-change", () => { workspace.markdown.value = editor.getMarkdown(); });
   const flush = vi.fn(() => editor.flush());
   const closeWindow = vi.fn(async () => {});
-  const actions = useDocumentActions(workspace, { flushEditor: flush, closeWindow });
+  const actions = useDocumentActions(workspace, createTauriDocumentPorts().prompts, { flushEditor: flush, closeWindow });
   const read = deferred<string>();
   const reading = deferred<void>();
   native.invoke.mockImplementation((command: string) => {

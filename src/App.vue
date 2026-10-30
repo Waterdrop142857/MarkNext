@@ -15,6 +15,7 @@ import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
 import type { EditorAppearance, EditorPort } from "./editor/editorPort";
 import { useDocumentTabs } from "./composables/useDocumentTabs";
+import { createTauriDocumentPorts } from "./platform/tauri/documentPorts";
 import { useNativeFileRequests } from "./composables/useNativeFileRequests";
 import DocumentTabs from "./components/DocumentTabs.vue";
 import { useDocumentAnalysis } from "./composables/useDocumentAnalysis";
@@ -38,7 +39,7 @@ function prepareEditor(): Promise<void> {
     EditorSession.value = module.default;
   }).finally(() => { editorLoading = null; });
 }
-const documentTabs = useDocumentTabs(() => preferences.value.defaultEncoding, {
+const documentTabs = useDocumentTabs(() => preferences.value.defaultEncoding, createTauriDocumentPorts(), {
   editor: () => editorSessionRef.value,
   prepareEditor,
   getView: captureView,

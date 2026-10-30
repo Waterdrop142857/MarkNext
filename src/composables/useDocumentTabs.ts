@@ -1,15 +1,13 @@
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useWorkspace } from "./useWorkspace";
 import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
 import { useRecovery } from "./useRecovery";
 import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
+import type { DocumentPorts } from "../document/ports";
 import type { EditorSessionCheckpoint } from "../editor/sessionTypes";
 import type { EditorLifecyclePort } from "../editor/editorPort";
-import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../document/types";
-import { informFileAlreadyOpen, showError } from "../services/dialogs";
+import type { RecoverySnapshot, RecoveryView } from "../document/types";
 import { t } from "../i18n";
 
 interface Workspace extends DocumentActionsSource, RecoverySource {
@@ -37,7 +35,7 @@ export interface DocumentTab {
 }
 export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "previousTab";
 
-export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
+export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, host: {
   editor(): EditorLifecyclePort | null;
   prepareEditor?(): Promise<void>;
   getView(): RecoveryView;
@@ -62,22 +60,22 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
     return tab.workspace.currentFilePath.value?.split(/[\\/]/).pop()
       || t("tabs.untitled", { number: tab.untitledNumber });
   }
-  async function canonical(path: string) { return invoke<string>("canonical_document_path", { path }); }
+  async function canonical(path: string) { return ports.files.canonicalPath(path); }
   async function guard(operation: () => Promise<boolean>): Promise<boolean> {
     if (busy.value || stopped) return false;
     busy.value = true;
     try { return await operation(); }
-    catch (error) { if (!stopped) await showError(t("error.fileAction"), error); return false; }
+    catch (error) { if (!stopped) await ports.prompts.error("fileAction", error); return false; }
     finally { locked.value = false; busy.value = false; }
   }
 
   function createWorkspace() {
     let workspace: Workspace;
-    workspace = useWorkspace(getDefaultEncoding, {
+    workspace = useWorkspace(getDefaultEncoding, ports, {
       resolveSavePath: async path => {
         const selected = await canonical(path);
         const duplicate = documents.value.find(tab => tab.workspace !== workspace && tab.workspace.currentFilePath.value === selected);
-        if (duplicate) { await informFileAlreadyOpen(selected); return null; }
+        if (duplicate) { await ports.prompts.alreadyOpen(selected); return null; }
         return selected;
       },
     });
@@ -93,11 +91,11 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
       checkpoint: null,
     } as DocumentTab;
     const flushEditor = () => { if (active.value === tab) host.editor()?.flush(); };
-    tab.actions = useDocumentActions(workspace, {
+    tab.actions = useDocumentActions(workspace, ports.prompts, {
       flushEditor, documentName: () => name(tab),
       closeWindow: async () => { throw new Error("Window close belongs to the tab manager"); },
     });
-    tab.recovery = useRecovery(workspace, {
+    tab.recovery = useRecovery(workspace, ports.recovery, {
       flushEditor,
       getView: () => active.value === tab && !tab.checkpoint ? host.getView() : tab.view,
     });
@@ -115,7 +113,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
 
   async function mount(tab: DocumentTab | null) {
     try { if (tab) await host.prepareEditor?.(); }
-    catch (error) { if (!stopped) await showError(t("error.fileAction"), error); return false; }
+    catch (error) { if (!stopped) await ports.prompts.error("fileAction", error); return false; }
     if (stopped) return false;
     active.value = tab;
     generation.value++;
@@ -196,8 +194,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
   }
 
   async function openDocuments(): Promise<boolean> {
-    const selected = await open({ title: t("document.open"), multiple: true, filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }] });
-    const paths = typeof selected === "string" ? [selected] : selected;
+    const paths = await ports.picker.openMany();
     if (!paths?.length || stopped) return false;
     return openPathsInternal(paths);
   }
@@ -215,7 +212,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
         const tab = register(workspace);
         done = await activateInternal(tab) || done;
       }
-      catch (error) { if (!stopped) await showError(t("error.open"), error); }
+      catch (error) { if (!stopped) await ports.prompts.error("open", error); }
     }
     return done;
   }
@@ -321,7 +318,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
 
   async function startRecovery() {
     try {
-      const listing = await invoke<RecoveryListing>("recovery_list");
+      const listing = await ports.recovery.list();
       if (stopped) return;
       archive.value = listing.records.filter(record => !retired.has(record.id) && !documents.value.some(tab => tab.id === record.id));
       unreadable.value = listing.unreadable; archiveFailed.value = false;
@@ -344,7 +341,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, host: {
     if (documents.value.some(tab => tab.id === id)) return Promise.resolve(false);
     const operation = archiveQueue.then(async () => {
       try {
-        await invoke("recovery_remove", { id }); retired.add(id);
+        await ports.recovery.remove(id); retired.add(id);
         archive.value = archive.value.filter(record => record.id !== id); archiveFailed.value = false;
         return true;
       }

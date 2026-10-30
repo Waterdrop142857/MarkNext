@@ -61,23 +61,22 @@ function harness(choices = ['不保存'], options = {}) {
     },
   };
   const dialogs = loadModule('src/services/dialogs.ts', { '@tauri-apps/plugin-dialog': dialog });
-  const { useWorkspace } = loadModule('src/composables/useWorkspace.ts', {
-    vue,
-    '../services/dialogs': dialogs,
-    '@tauri-apps/plugin-dialog': dialog,
-    '@tauri-apps/api/core': {
-      async invoke(command, args) {
-        if (command === 'read_file') return { content: disk.get(args.path), encoding: 'utf-8', bom: false, version: disk.get(args.path) };
-        if (command === 'file_version') return disk.get(args.path) ?? 'missing';
-        assert.equal(command, 'write_file');
-        if (options.failSave) throw new Error('simulated write failure');
-        disk.set(args.path, args.content);
-        options.afterWrite?.(workspace);
-        return args.content;
-      },
-    },
+  const native = { async invoke(command, args) {
+    if (command === 'read_file') return { content: disk.get(args.path), encoding: 'utf-8', bom: false, version: disk.get(args.path) };
+    if (command === 'file_version') return disk.get(args.path) ?? 'missing';
+    assert.equal(command, 'write_file');
+    if (options.failSave) throw new Error('simulated write failure');
+    disk.set(args.path, args.content);
+    options.afterWrite?.(workspace);
+    return args.content;
+  } };
+  const { createTauriDocumentPorts } = loadModule('src/platform/tauri/documentPorts.ts', {
+    '@tauri-apps/api/core': native, '@tauri-apps/plugin-dialog': dialog,
+    '../../i18n': translations, '../../services/dialogs': dialogs,
   });
-  workspace = useWorkspace();
+  const ports = createTauriDocumentPorts();
+  const { useWorkspace } = loadModule('src/composables/useWorkspace.ts', { vue });
+  workspace = useWorkspace(() => 'utf-8', ports);
   workspace.currentFilePath.value = '/old.md';
   workspace.savedMarkdown.value = 'saved';
   workspace.markdown.value = 'edited';
@@ -105,7 +104,7 @@ function harness(choices = ['不保存'], options = {}) {
   const { useDocumentActions } = loadModule('src/composables/useDocumentActions.ts', {
     '../services/dialogs': dialogs,
   });
-  const actions = useDocumentActions(workspace, {
+  const actions = useDocumentActions(workspace, ports.prompts, {
     flushEditor: () => options.flush?.(workspace),
     closeWindow: chrome.destroyWindow,
   });

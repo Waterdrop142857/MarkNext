@@ -1,12 +1,12 @@
 import { ref, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
 import type { RecoverySource } from "../document/consumers";
+import type { RecoveryStore } from "../document/ports";
 import type { RecoveryListing, RecoverySnapshot, RecoveryView } from "../document/types";
 import { defaultFileFormat } from "../document/types";
 
 // One write queue orders backups and deletions across document switches. Never
 // send a mutable workspace object to an asynchronous write.
-export function useRecovery(workspace: RecoverySource, options: {
+export function useRecovery(workspace: RecoverySource, store: RecoveryStore, options: {
   flushEditor: () => void;
   getView?: () => RecoveryView | undefined;
 }) {
@@ -29,7 +29,7 @@ export function useRecovery(workspace: RecoverySource, options: {
   function clearTimers() { clearTimeout(debounce); clearTimeout(deadline); debounce = deadline = undefined; }
   function remove(id: string): Promise<boolean> {
     return enqueue(async () => {
-      await invoke("recovery_remove", { id });
+      await store.remove(id);
       known.delete(id); signatures.delete(id);
       records.value = records.value.filter(record => record.id !== id);
     });
@@ -56,7 +56,7 @@ export function useRecovery(workspace: RecoverySource, options: {
     return enqueue(async () => {
       known.add(id);
       if (signatures.get(id) === signature) return;
-      await invoke("recovery_write", { snapshot: record });
+      await store.write(record);
       signatures.set(id, signature);
     });
   }
@@ -83,7 +83,7 @@ export function useRecovery(workspace: RecoverySource, options: {
 
   async function start(initial?: RecoveryListing): Promise<void> {
     try {
-      const listing = initial ?? await invoke<RecoveryListing>("recovery_list");
+      const listing = initial ?? await store.list();
       listing.records.forEach(record => known.add(record.id));
       records.value = listing.records.filter(record => record.id !== workspace.documentId.value);
       unreadable.value = listing.unreadable;

@@ -1,14 +1,10 @@
-import { t } from "../i18n";
 import { computed, ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { defaultPreferences } from "../config/preferences";
 import { defaultFileFormat, type FileEncoding, type FileFormat } from "../document/types";
-import { showError } from "../services/dialogs";
 import { conflictVersion, newDocumentId } from "../services/documentSafety";
-import type { ExternalChange, ReadDocument, RecoverySnapshot } from "../document/types";
+import type { ExternalChange, RecoverySnapshot } from "../document/types";
+import type { DocumentPorts } from "../document/ports";
 
-export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defaultPreferences.defaultEncoding, options: {
+export function useWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, options: {
   resolveSavePath?: (path: string) => Promise<string | null>;
 } = {}) {
   const markdown = ref("");
@@ -48,7 +44,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     if (beforeReplace && !(await beforeReplace())) return false;
     const generation = documentGeneration.value;
     let approvedContent = markdown.value;
-    const incoming = await invoke<ReadDocument>("read_file", { path: selected, defaultEncoding: reload ? fileFormat.value?.encoding ?? getDefaultEncoding() : getDefaultEncoding() });
+    const incoming = await ports.files.read(selected, reload ? fileFormat.value?.encoding ?? getDefaultEncoding() : getDefaultEncoding());
     if (typeof incoming.version !== "string") throw new Error("Missing document version");
     for (;;) {
       flushEditor?.();
@@ -77,18 +73,12 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     flushEditor?: () => void,
   ): Promise<boolean> {
     try {
-      const selected = await open({
-        title: t("document.open"),
-        multiple: false,
-        filters: [
-          { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-        ],
-      });
+      const selected = await ports.picker.openOne();
       if (typeof selected !== "string") return false;
       return await replaceFromDisk(selected, beforeReplace, flushEditor);
     }
     catch (error) {
-      await showError(t("error.open"), error);
+      await ports.prompts.error("open", error);
       return false;
     }
   }
@@ -111,7 +101,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     writing += 1;
     const write = writeQueue.catch(() => undefined).then(async () => {
       const expectedVersion = approvedVersion ?? savedVersions.get(key) ?? expected;
-      const version = await invoke<string>("write_file", { path, content, ...format, expectedVersion });
+      const version = await ports.files.write(path, content, format, expectedVersion);
       if (typeof version !== "string") throw new Error("Missing saved document version");
       savedVersions.set(key, version);
       return version;
@@ -137,7 +127,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
         setExternalChange({ kind: version === "missing" ? "deleted" : "changed", version });
         return false;
       }
-      await showError(t("error.save"), error);
+      await ports.prompts.error("save", error);
       return false;
     }
     finally { writing -= 1; }
@@ -148,22 +138,16 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     const task = (async () => {
       const generation = documentGeneration.value;
       try {
-        const choice = await save({
-          title: t("command.saveAs"),
-          filters: [
-            { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-          ],
-          defaultPath: currentFilePath.value ?? "untitled.md",
-        });
+        const choice = await ports.picker.saveAs(currentFilePath.value ?? "untitled.md");
         if (typeof choice !== "string" || documentGeneration.value !== generation) return false;
         const selected = options.resolveSavePath ? await options.resolveSavePath(choice) : choice;
         if (!selected || documentGeneration.value !== generation) return false;
-        const expected = selected === currentFilePath.value ? undefined : await invoke<string>("file_version", { path: selected });
+        const expected = selected === currentFilePath.value ? undefined : await ports.files.version(selected);
         if (documentGeneration.value !== generation) return false;
         return await writeSnapshot(selected, markdown.value, true, expected);
       }
       catch (error) {
-        await showError(t("error.saveAs"), error);
+        await ports.prompts.error("saveAs", error);
         return false;
       }
     })();
@@ -204,13 +188,13 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     const generation = documentGeneration.value;
     const baseline = diskVersion.value;
     try {
-      const stamp = await invoke<string>("file_status", { path });
+      const stamp = await ports.files.stamp(path);
       if (writing || documentGeneration.value !== generation || currentFilePath.value !== path || diskVersion.value !== baseline) return false;
       if (checkedDisk?.generation === generation && checkedDisk.path === path && checkedDisk.baseline === baseline && checkedDisk.stamp === stamp) {
         return checkedDisk.version !== baseline && checkedDisk.version !== "missing";
       }
-      const version = await invoke<string>("file_version", { path });
-      const after = await invoke<string>("file_status", { path });
+      const version = await ports.files.version(path);
+      const after = await ports.files.stamp(path);
       if (writing || documentGeneration.value !== generation || currentFilePath.value !== path || diskVersion.value !== baseline) return false;
       checkedDisk = stamp === after ? { generation, path, baseline, stamp, version } : null;
       setExternalChange(version === baseline ? null : { kind: version === "missing" ? "deleted" : "changed", version });
@@ -229,7 +213,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     const path = currentFilePath.value;
     if (!path) return false;
     try { return await replaceFromDisk(path, beforeReplace, flushEditor, true); }
-    catch (error) { await showError(t("error.open"), error); return false; }
+    catch (error) { await ports.prompts.error("open", error); return false; }
   }
 
   async function restoreRecovery(record: RecoverySnapshot, beforeReplace: () => Promise<boolean>, flushEditor: () => void): Promise<boolean> {
@@ -238,7 +222,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     let approvedContent = markdown.value;
     let matches = false;
     if (record.path) {
-      try { matches = await invoke<string>("file_version", { path: record.path }) === record.diskVersion && record.diskVersion !== "missing"; }
+      try { matches = await ports.files.version(record.path) === record.diskVersion && record.diskVersion !== "missing"; }
       catch { /* Missing/unreadable originals restore as independent copies. */ }
     }
     for (;;) {
@@ -283,7 +267,7 @@ export function useWorkspace(getDefaultEncoding: () => FileEncoding = () => defa
     openFile,
     openPath: async (path: string) => {
       try { return await replaceFromDisk(path); }
-      catch (error) { await showError(t("error.open"), error); return false; }
+      catch (error) { await ports.prompts.error("open", error); return false; }
     },
     newFile,
     saveFileAs,

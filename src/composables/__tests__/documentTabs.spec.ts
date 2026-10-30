@@ -1,3 +1,4 @@
+import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { effectScope, nextTick } from "vue";
 import { useDocumentTabs } from "../useDocumentTabs";
@@ -57,7 +58,7 @@ function mount(prepareEditor?: () => Promise<void>) {
     suspend: async () => { suspended.push(manager.active.value!.id); return capture(); },
     resume: async () => { mounted.push(manager.active.value!.id); return !failMount.has(manager.active.value!.workspace.currentFilePath.value ?? ""); },
   };
-  manager = scope.run(() => useDocumentTabs(() => "utf-8", {
+  manager = scope.run(() => useDocumentTabs(() => "utf-8", createTauriDocumentPorts(), {
     prepareEditor,
     editor: () => manager.active.value ? renderer : null,
     getView: () => ({ scrollTop: 42 }),

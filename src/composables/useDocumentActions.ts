@@ -1,12 +1,12 @@
-import { t } from "../i18n";
-import { askUnsavedChanges, askOverwrite, askExternalChange, showError } from "../services/dialogs";
 import type { RecoverySnapshot } from "../document/types";
 import type { DocumentActionsSource } from "../document/consumers";
+import type { DocumentPrompts } from "../document/ports";
 
 export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "exit" | "reload" | "overwrite";
 
 export function useDocumentActions(
   workspace: DocumentActionsSource,
+  prompts: DocumentPrompts,
   options: { flushEditor: () => void; closeWindow: () => Promise<void>; documentName?: () => string },
 ) {
   let pending = false;
@@ -17,7 +17,7 @@ export function useDocumentActions(
     while (workspace.dirty.value) {
       const generation = workspace.documentGeneration.value;
       const promptedContent = workspace.markdown.value;
-      const choice = await askUnsavedChanges(options.documentName?.());
+      const choice = await prompts.unsaved(options.documentName?.());
       if (choice === "cancel") return false;
       options.flushEditor();
       if (workspace.documentGeneration.value !== generation) return false;
@@ -41,7 +41,7 @@ export function useDocumentActions(
       if (action === "overwrite") {
         const generation = workspace.documentGeneration.value;
         const version = workspace.externalChange.value?.version;
-        if (!version || !(await askOverwrite()) || workspace.documentGeneration.value !== generation) return false;
+        if (!version || !(await prompts.overwrite()) || workspace.documentGeneration.value !== generation) return false;
         options.flushEditor();
         return await workspace.overwriteFile(version);
       }
@@ -62,7 +62,7 @@ export function useDocumentActions(
       return true;
     }
     catch (error) {
-      await showError(action === "exit" ? t("error.closeWindow") : t("error.fileAction"), error);
+      await prompts.error(action === "exit" ? "closeWindow" : "fileAction", error);
       return false;
     }
     finally {
@@ -74,7 +74,7 @@ export function useDocumentActions(
     if (pending) return false;
     pending = true;
     try { return await workspace.restoreRecovery(record, confirmReplacement, options.flushEditor); }
-    catch (error) { await showError(t("recovery.restoreError"), error); return false; }
+    catch (error) { await prompts.error("restore", error); return false; }
     finally { pending = false; }
   }
 
@@ -88,7 +88,7 @@ export function useDocumentActions(
     try {
       options.flushEditor();
       const promptedContent = workspace.markdown.value;
-      if (await askExternalChange(workspace.dirty.value) !== "reload") return false;
+      if (await prompts.externalChange(workspace.dirty.value) !== "reload") return false;
       return await workspace.reloadFile(async () => {
         options.flushEditor();
         if (workspace.documentGeneration.value !== generation) return false;
@@ -99,7 +99,7 @@ export function useDocumentActions(
     }
     catch (error) {
       lastExternalPrompt = null;
-      await showError(t("error.fileAction"), error);
+      await prompts.error("fileAction", error);
       return false;
     }
     finally { pending = false; }
