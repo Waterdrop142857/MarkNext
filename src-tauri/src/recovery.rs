@@ -1,4 +1,4 @@
-use crate::{atomic_write, encode_document, FileEncoding};
+use crate::document::{atomic_write, encode_document, FileEncoding};
 use serde::{Deserialize, Serialize};
 use std::{
     fs, io,
