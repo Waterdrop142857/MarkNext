@@ -14,7 +14,7 @@ import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/
 import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
 import type { EditorAppearance, EditorPort } from "./editor/editorPort";
-import { useDocumentTabs } from "./composables/useDocumentTabs";
+import { useDocumentTabs, type TabAction } from "./composables/useDocumentTabs";
 import { createTauriDocumentPorts } from "./platform/tauri/documentPorts";
 import { useNativeFileRequests } from "./composables/useNativeFileRequests";
 import DocumentTabs from "./components/DocumentTabs.vue";
@@ -26,6 +26,7 @@ import { useTheme } from "./composables/useTheme";
 import { useShortcuts } from "./composables/useShortcuts";
 import { createShortcutHandler } from "./services/shortcutHandler";
 import { useDocumentMonitoring } from "./application/useDocumentMonitoring";
+import { createCommandRegistry } from "./application/commands";
 import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
@@ -239,7 +240,7 @@ const menus = computed(() => appMenus.map((menu) => {
       ...item,
       label: t(item.label),
       shortcut: commandShortcut(item.id),
-      disabled: item.disabled || documentTabs.busy.value || (!documentTabs.active.value && ["save", "saveAs", "saveAll", "close", "closeAll"].includes(item.id)),
+      disabled: item.disabled || !commandRegistry.canExecute(item.id),
       checked: menu.id !== "theme" ? item.checked : item.id === "theme-light"
         ? themeMode.value === "light"
         : item.id === "theme-dark"
@@ -256,94 +257,17 @@ function toggleMenu(menuId: string) {
 }
 
 function runMenuCommand(itemId: string) {
-  if (documentTabs.busy.value) return;
-  openMenuId.value = null;
-
-  switch (itemId) {
-    case "new":
-    case "open":
-    case "save":
-    case "saveAs":
-    case "saveAll":
-    case "closeAll":
-    case "nextTab":
-    case "previousTab":
-    case "close":
-    case "exit":
-    case "overwrite":
-      void documentActions.run(itemId).then((done) => {
-        if (done) { void nextTick(focusEditor); void checkDisk(); }
-      });
-      break;
-    case "reload":
-      void reloadDocument();
-      break;
-    case "recovery":
-      recoveryOpen.value = true;
-      break;
-    case "settings":
-    case "shortcuts":
-      contextMenu.value = null;
-      settingsCategory.value = itemId === "shortcuts" ? "shortcuts" : "appearance";
-      settingsOpen.value = true;
-      break;
-    case "undo":
-      editorUndo();
-      break;
-    case "redo":
-      editorRedo();
-      break;
-    case "cut":
-      document.execCommand("cut");
-      break;
-    case "copy":
-      document.execCommand("copy");
-      break;
-    case "paste":
-      void pasteClipboard();
-      break;
-    case "find":
-      openSearch(false);
-      break;
-    case "replace":
-      openSearch(true);
-      break;
-    case "findNext":
-      findInDocument(true);
-      break;
-    case "findPrevious":
-      findInDocument(false);
-      break;
-    case "selectAll":
-      selectAllDocument();
-      break;
-    case "toggleMode":
-      void toggleEditorMode();
-      break;
-    case "clear":
-      clearEditorContent();
-      break;
-    case "theme-light":
-      setThemeMode("light");
-      break;
-    case "theme-dark":
-      setThemeMode("dark");
-      break;
-    case "theme-system":
-      setThemeMode("system");
-      break;
-    case "devtools":
-      if (!import.meta.env.DEV) return;
-      void invoke("open_devtools").catch((error) => {
-        console.error("Failed to open devtools:", error);
-      });
-      break;
-    case "about":
-      console.log("MarkNext - WYSIWYG Markdown editor built with Tauri 2 + Vue 3");
-      break;
-    default:
-      break;
-  }
+  if (commandRegistry.execute(itemId)) openMenuId.value = null;
+}
+function runTabAction(action: TabAction) {
+  void documentActions.run(action).then(done => {
+    if (done) { void nextTick(focusEditor); void checkDisk(); }
+  });
+}
+function openSettings(category: SettingsCategory) {
+  contextMenu.value = null;
+  settingsCategory.value = category;
+  settingsOpen.value = true;
 }
 
 function editorUndo() {
@@ -456,14 +380,36 @@ function handleContextMenu(event: MouseEvent) {
 }
 
 function runContextCommand(itemId: string) {
-  if (documentTabs.busy.value) return;
-  if (itemId === "tabClose") {
-    const id = contextMenu.value?.tabId;
-    if (id) void closeTab(id);
-    return;
-  }
-  runMenuCommand(itemId);
+  const tabId = contextMenu.value?.tabId;
+  if (commandRegistry.execute(itemId, tabId)) openMenuId.value = null;
 }
+
+const commandRegistry = createCommandRegistry({
+  new: () => runTabAction("new"), open: () => runTabAction("open"),
+  save: () => runTabAction("save"), saveAs: () => runTabAction("saveAs"),
+  saveAll: () => runTabAction("saveAll"), close: () => runTabAction("close"),
+  closeAll: () => runTabAction("closeAll"), exit: () => runTabAction("exit"),
+  nextTab: () => runTabAction("nextTab"), previousTab: () => runTabAction("previousTab"),
+  overwrite: () => runTabAction("overwrite"), reload: () => { void reloadDocument(); },
+  recovery: () => { recoveryOpen.value = true; },
+  settings: () => openSettings("appearance"), shortcuts: () => openSettings("shortcuts"),
+  undo: editorUndo, redo: editorRedo,
+  cut: () => { document.execCommand("cut"); }, copy: () => { document.execCommand("copy"); },
+  paste: () => { void pasteClipboard(); }, selectAll: selectAllDocument,
+  find: () => openSearch(false), replace: () => openSearch(true),
+  findNext: () => findInDocument(true), findPrevious: () => findInDocument(false),
+  toggleMode: () => { void toggleEditorMode(); }, clear: clearEditorContent,
+  "theme-light": () => setThemeMode("light"), "theme-dark": () => setThemeMode("dark"),
+  "theme-system": () => setThemeMode("system"),
+  devtools: () => {
+    void invoke("open_devtools").catch(error => console.error("Failed to open devtools:", error));
+  },
+  about: () => console.log("MarkNext - WYSIWYG Markdown editor built with Tauri 2 + Vue 3"),
+  tabClose: request => { void closeTab(request.tabId); },
+}, request => !documentTabs.busy.value
+  && (!!documentTabs.active.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
+  && (request.id !== "devtools" || import.meta.env.DEV)
+  && (request.id !== "tabClose" || documentTabs.tabs.value.some(tab => tab.id === request.tabId)));
 
 const handleShortcut = createShortcutHandler({
   bindings: () => shortcutBindings.value,
