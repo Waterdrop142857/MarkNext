@@ -1,8 +1,8 @@
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { createDocumentController } from "../document/createDocumentController";
-import { useDocumentActions, type DocumentAction } from "./useDocumentActions";
-import { useDocumentRecovery } from "../workspace/useDocumentRecovery";
-import { useRecoveryCatalog } from "../workspace/useRecoveryCatalog";
+import { useDocumentActions, type DocumentAction } from "../composables/useDocumentActions";
+import { useDocumentRecovery } from "./useDocumentRecovery";
+import { useRecoveryCatalog } from "./useRecoveryCatalog";
 import type { ExternalChange, FileEncoding } from "../document/types";
 import type { DocumentActionsSource, RecoverySource } from "../document/consumers";
 import type { DocumentPorts } from "../document/ports";
@@ -23,7 +23,7 @@ interface Workspace extends DocumentActionsSource, RecoverySource {
   openPath(path: string): Promise<boolean>;
   checkExternalChange(): Promise<boolean>;
 }
-export interface DocumentTab {
+interface DocumentTab {
   readonly id: string;
   readonly workspace: Workspace;
   readonly revision: Ref<number>;
@@ -36,7 +36,7 @@ export interface DocumentTab {
 }
 export type TabAction = DocumentAction | "saveAll" | "closeAll" | "nextTab" | "previousTab";
 
-export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, host: {
+export function useDocumentWorkspace(getDefaultEncoding: () => FileEncoding, ports: DocumentPorts, host: {
   editor(): EditorLifecyclePort | null;
   prepareEditor?(): Promise<void>;
   getView(): RecoveryView;
@@ -354,7 +354,7 @@ export function useDocumentTabs(getDefaultEncoding: () => FileEncoding, ports: D
     checkExternalChange,
   };
   return {
-    workspace, active, documents, busy, locked,
+    workspace, activeId: computed(() => active.value?.id ?? null), busy, locked,
     identity: computed(() => ({ documentId: active.value?.id ?? "empty", revision: active.value?.revision.value ?? 0 })),
     checkpoint: computed(() => { generation.value; return active.value?.checkpoint ?? null; }),
     title: computed(() => active.value ? name(active.value) : t("document.none")),

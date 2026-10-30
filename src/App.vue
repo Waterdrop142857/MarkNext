@@ -14,7 +14,7 @@ import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/
 import { usePreferences } from "./composables/usePreferences";
 import type { FluentMenuItem } from "./components/fluentMenu";
 import type { EditorAppearance, EditorPort } from "./editor/editorPort";
-import { useDocumentTabs, type TabAction } from "./composables/useDocumentTabs";
+import { useDocumentWorkspace, type TabAction } from "./workspace/useDocumentWorkspace";
 import { createTauriDocumentPorts } from "./platform/tauri/documentPorts";
 import { useNativeFileRequests } from "./composables/useNativeFileRequests";
 import DocumentTabs from "./components/DocumentTabs.vue";
@@ -41,7 +41,7 @@ function prepareEditor(): Promise<void> {
     EditorSession.value = module.default;
   }).finally(() => { editorLoading = null; });
 }
-const documentTabs = useDocumentTabs(() => preferences.value.defaultEncoding, createTauriDocumentPorts(), {
+const documentTabs = useDocumentWorkspace(() => preferences.value.defaultEncoding, createTauriDocumentPorts(), {
   editor: () => editorSessionRef.value,
   prepareEditor,
   getView: captureView,
@@ -407,7 +407,7 @@ const commandRegistry = createCommandRegistry({
   about: () => console.log("MarkNext - WYSIWYG Markdown editor built with Tauri 2 + Vue 3"),
   tabClose: request => { void closeTab(request.tabId); },
 }, request => !documentTabs.busy.value
-  && (!!documentTabs.active.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
+  && (!!documentTabs.activeId.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
   && (request.id !== "devtools" || import.meta.env.DEV)
   && (request.id !== "tabClose" || documentTabs.tabs.value.some(tab => tab.id === request.tabId)));
 
@@ -473,7 +473,7 @@ onBeforeUnmount(() => {
       @command="runMenuCommand"
     />
 
-    <DocumentTabs :tabs="documentTabs.tabs.value" :active-id="documentTabs.active.value?.id ?? null"
+    <DocumentTabs :tabs="documentTabs.tabs.value" :active-id="documentTabs.activeId.value"
       :busy="documentTabs.busy.value" @activate="activateTab" @close="closeTab" @new="runMenuCommand('new')" />
 
     <div v-if="openMenuId" class="menu-overlay" @click="openMenuId = null" />
@@ -535,7 +535,7 @@ onBeforeUnmount(() => {
       <DocumentOutline v-if="outlineOpen" :headings="analysis.headings" :active-id="activeHeading" @navigate="navigateOutline" @close="closeOutline" />
       <main id="document-panel" class="editor-area" :class="{ 'source-mode': isSourceMode }"
         :inert="documentTabs.locked.value"
-        :role="documentTabs.active.value ? 'tabpanel' : undefined" :aria-labelledby="documentTabs.active.value ? `document-tab-${documentTabs.active.value.id}` : undefined">
+        :role="documentTabs.activeId.value ? 'tabpanel' : undefined" :aria-labelledby="documentTabs.activeId.value ? `document-tab-${documentTabs.activeId.value}` : undefined">
         <div v-if="!isUntitled && !currentFilePath && !markdown" class="empty-state">
           <p>{{ t('document.empty') }}</p>
           <button type="button" class="primary-btn ui-control" @click="runMenuCommand('open')">{{ t('document.open') }}</button>
