@@ -1,13 +1,20 @@
 # MarkNext 降耦合重构执行方案
 
-状态：重构进行中；以下计划保留最初范围，尚未完成的工作继续按阶段推进。
+状态：A–G 的代码重构和相关自动化验证已完成。此文后面的原始步骤和基线问题保留作实施记录；当前模块及验收结果以本节和源码为准。
 
-进展（2026-10-30）：A1 已完成；B1 已将 App 的编辑器交互迁入会话并提供中立 ready 状态，旧的测试辅助实例接口及更细的引擎拆分仍待清理；C1 已注入文件、选择器、对话框和恢复存储，C2 已提取单文档状态，其余控制器边界及旧测试迁移待完成；D1 已拆分恢复目录和文档恢复写入，D2 待完成；Rust 已提取文档操作与编解码，其他原生模块细分待完成。E、G 尚未完成。
+- A：文档格式、恢复数据和消费接口已独立。
+- B：App 通过中立会话接口操作编辑器，Muya/源码交互分别由适配器实现；旧实例暴露已移除。
+- C：文档状态和控制器已分离，文件、对话框和恢复存储通过平台接口注入；59 项旧动作测试迁入 Vitest。
+- D：恢复目录、每文档备份和工作区协调器已分开；对外是只读标签摘要、活动文档视图和带代号的更新入口。窗口退出由工作区负责。
+- E：菜单、快捷键、右键和原生关闭共用命令注册入口；磁盘监听及清理独立管理。
+- F：Rust 应用启动、编码、路径、I/O、图片授权和命令包装已拆开；单例锁与协议保持。
+- G：旧历史栈、重复会话类型和 VM 测试加载器已移除；扩展名与平台图标配置增加一致性测试。
 
-验证记录：文档相关单元测试、保存动作测试、编辑器单元测试及相关 Chromium 浏览器回归通过。用户要求跳过 WebKit 测试；该平台未完成本轮回归，不作通过声明。
+已按改动范围运行相关 Vitest、类型检查、Rust 编译/单元测试和 Chromium 交互回归。按用户要求跳过 WebKit 测试；没有在本轮执行真实 Tauri 窗口、Windows 或 macOS 的人工验收，也没有进行跨机器性能对比。浏览器文件 I/O 由 mock 提供，不能替代原生平台验证。
 
-基线：`9a1b1b7`，2026-10-30。本轮核对了当前 App、文档/标签/恢复 composable、EditorSession、历史契约、原生命令、测试入口和现有设计文档。开始分析时工作区干净。本轮只新增本文，不修改业务实现、不安装依赖、不运行无关测试。
+同机 Chromium 大文件夹具分别在基线和重构后各运行三次：约 113 万字符、5000 行的文档加载并切换至源码模式，基线耗时 4917–4929 ms，重构后耗时 4793–4915 ms，源码视口均渲染 20 行。该结果未显示明显退化，但样本量小且使用模拟文件 I/O，不能代表真实磁盘或原生 WebKitGTK 性能。
 
+基线：`9a1b1b7`，2026-10-30。原始设计基于该版本的静态检查。
 ## 1. 目标、范围和优先级
 
 目标是让文档状态、编辑器实例、平台能力与 UI 有明确边界，使后续新增文档能力时不必同时改动 App、Muya、标签管理和文件 I/O。
@@ -26,7 +33,7 @@
 
 此次不加入新状态框架、依赖注入容器、全局事件总线；不改编辑器引擎、不重写解析器、不增加新的多文件产品行为。性能优化先约束不能回退，不把全文虚拟化、后台渲染缓存、历史持久化等混进结构调整。
 
-## 2. 当前证据与问题定位
+## 2. 重构前基线证据与问题定位
 
 | 当前入口 | 已核实的耦合 | 迁移去向 |
 | --- | --- | --- |
@@ -43,7 +50,7 @@
 | `src-tauri/src/recovery.rs` | 从 crate 根引用编码和 atomic_write | 依赖明确的 document 子模块 |
 | `tests/document-actions.test.cjs` | 自写 TS 转译/VM 加载器，按导入字符串注入 mock | 随业务接口迁移到现有 Vitest，保留场景覆盖 |
 
-替换按钮问题是静态发现的能力判断缺陷：源码检查点恢复可以只挂载 SourceEditor，而当前按钮仍依赖 Muya。实施 B 时应先补这个状态的行为用例，再修正；本轮未运行 UI，不将其描述为已实机复现。
+基线中的替换按钮依赖 Muya 实例。现已改用活动模式的可用状态，源码检查点独立恢复后替换的 Chromium 测试通过。
 
 当前 `sessionTypes.ts` 的 Muya 依赖主要是 type-only，不能据此认定它破坏了懒加载。`checkpointCodec.ts` 的运行期校验需要引擎结构；只有真实出现加载或维护收益时才进一步拆 codec，不用 `unknown` 替换已有强类型。
 
@@ -68,16 +75,17 @@
 
 ## 4. 目标模块与依赖方向
 
-以下为目标布局，按阶段创建；不要先创建空模块。
+当前布局如下；原始计划中的分散平台文件合并为一个 Tauri 适配器，具体接口以源码为准。
 
 ```text
 src/
   App.vue                         # 布局、组合、UI 展示状态
   document/
-    types.ts                      # 编码、格式、身份、磁盘与恢复数据类型
-    ports.ts                      # 文件、选择器、对话框、恢复存储能力
-    useDocumentState.ts           # Vue refs、只读视图、受控状态提交
-    createDocumentController.ts   # 保存/重载/外部版本/确认用例与队列
+    types.ts / errors.ts / identity.ts # 文档格式、错误和身份
+    ports.ts / consumers.ts       # 平台能力及消费方接口
+    useDocumentState.ts           # 单文档 Vue 状态
+    createDocumentController.ts   # 保存/重载/外部版本与队列
+    useDocumentActions.ts         # 保存确认与文档动作
   workspace/
     useDocumentWorkspace.ts       # 标签注册、激活事务、关闭协调
     useRecoveryCatalog.ts         # 旧草稿目录、删除和 retired 过滤
@@ -89,13 +97,10 @@ src/
     sourceCommands.ts              # CodeMirror/SourceEditor 特有操作
     *HistoryAdapter.ts            # 现有历史适配器
   application/
-    commands.ts                   # 命令 ID/参数/结果类型
-    createCommandRegistry.ts      # 运行和可用性判定
+    commands.ts                   # 命令 ID、运行和可用性判定
     useDocumentMonitoring.ts      # 焦点、可见性、磁盘轮询和清理
   platform/tauri/
-    documentFiles.ts               # invoke 参数映射与错误归一化
-    documentDialogs.ts             # 文件选择和语义对话框，负责翻译
-    recoveryStore.ts               # recovery IPC
+    documentPorts.ts              # 文件、对话框和恢复 IPC 适配
   components/
     EditorSession.vue             # 组装能力与既有生命周期
     MuyaEditor.vue / SourceEditor.vue
@@ -119,11 +124,11 @@ src/
 | 文件写队列、saveAsPending、磁盘缓存 | DocumentController | 保存/检查等用例 | 文档生命周期结束，晚到结果失效 |
 | 搜索框文本、设置弹窗、菜单展开 | UI | props/events 或局部 ref | UI 卸载 |
 
-`DocumentSession` 当前没有运行期调用者。最终移除这份未采用的重复模型并修订历史文档，使用上表表达实际所有权；不要为了兑现旧类型而复制全部状态。纯检查点继续是不可变数据。若以后需要工作区导出，再为该用途设计版本化 DTO。
+未采用的 `DocumentSession` 类型已移除，实际所有权以上表为准；没有复制一套可变状态。纯检查点继续是不可变数据。若以后需要工作区导出，再为该用途设计版本化 DTO。
 
 ### 4.2 文档和平台接口
 
-接口按消费方需要拆分。以下是目标形状，实施时复用现有类型，不能以此删掉现有保护字段：
+接口按消费方需要拆分；以下为主要接口，完整定义见 `src/document/ports.ts`：
 
 ```ts
 interface DocumentFiles {
@@ -131,17 +136,15 @@ interface DocumentFiles {
   read(path: string, fallback: FileEncoding): Promise<ReadDocument>;
   stamp(path: string): Promise<string>;
   version(path: string): Promise<string>;
-  write(request: {
-    path: string; content: string; format: Readonly<FileFormat>;
-    expectedVersion: string;
-  }): Promise<string>; // 保存后的磁盘版本
+  write(path: string, content: string, format: FileFormat, expectedVersion: string): Promise<string>;
 }
 interface DocumentPicker {
+  openOne(): Promise<string | null>;
   openMany(): Promise<readonly string[] | null>;
   saveAs(defaultPath: string): Promise<string | null>;
 }
 interface DocumentPrompts {
-  unsaved(name: string): Promise<"save" | "discard" | "cancel">;
+  unsaved(name?: string): Promise<"save" | "discard" | "cancel">;
   overwrite(): Promise<boolean>;
   externalChange(dirty: boolean): Promise<"reload" | "keep">;
   alreadyOpen(path: string): Promise<void>;
@@ -149,16 +152,16 @@ interface DocumentPrompts {
 }
 interface RecoveryStore {
   list(): Promise<RecoveryListing>;
-  write(snapshot: Readonly<RecoverySnapshot>): Promise<void>;
+  write(snapshot: RecoverySnapshot): Promise<void>;
   remove(id: string): Promise<void>;
 }
 ```
 
-- `DocumentErrorContext` 是 open/save/saveAs/reload/restore/close 等语义联合类型；翻译键只在适配器映射。保留当前可见文案，不把原生错误直接当可执行指令。
-- 文件适配器统一验证必需返回字段，并归一化 conflict/io 等错误；业务层不再到处解析原始 IPC 对象。不要使用路径字符串模拟错误状态。
+- `DocumentErrorContext` 包含 open/save/saveAs/fileAction/closeWindow/restore 等语义类型；翻译键只在适配器映射。保留当前可见文案，不把原生错误直接当可执行指令。
+- 文件适配器验证读写返回字段，并将冲突错误转换为 `DocumentConflict`；其他错误保留原始信息供展示；业务层不再到处解析原始 IPC 对象。不要使用路径字符串模拟错误状态。
 - 初次迁移继续沿用 boolean 返回语义，避免同时改所有动作协议；新命令注册器可把其转换成 done/not-executed。确需区分取消/繁忙/冲突时再在控制器定义判别联合，不能从 false 猜测取消原因。
-- 消费方使用 `DocumentReadState`、`RecoverySource`、`DocumentReplacementGuard` 等小接口。显式列出必要字段；不要只是把 ReturnType 改名为一个同样巨大的接口。
-- `updateFromEditor(text, identity)` 必须拒绝旧文档/generation 更新。状态批量替换沿用既有更新顺序和同步 revision watcher，先建立回归用例，再考虑调整提交实现。
+- 消费方使用 `DocumentActionsSource`、`RecoverySource` 等小接口。显式列出必要字段；不要只是把 ReturnType 改名为一个同样巨大的接口。
+- `updateMarkdown`、`updateMode` 和 `updateSelection` 拒绝旧文档/generation 的事件。状态批量替换沿用既有更新顺序和同步 revision watcher，先建立回归用例，再考虑调整提交实现。
 - 规范化与重复路径政策属于工作区，控制器通过 `resolveSavePath` 类似的窄回调请求批准；文件适配器只解决路径，不依赖标签集合。
 
 ### 4.3 编辑器接口
@@ -176,23 +179,24 @@ interface EditorInteractionPort {
   focus(): void;
   undo(): boolean;
   redo(): boolean;
-  selectAll(): boolean;
-  clearUndoably(): boolean;
+  selectAll(): void;
+  clearUndoably(): void;
+  paste(): Promise<void>;
   search(query: string): void;
-  find(query: string, direction: "next" | "previous"): void;
-  replace(query: string, replacement: string, all: boolean): boolean;
+  find(query: string, forward: boolean): void;
+  replace(query: string, replacement: string, all: boolean): void;
   closeSearch(): void;
-  navigateHeading(target: HeadingTarget): boolean;
+  navigateHeading(target: OutlineHeading): boolean;
   captureView(): RecoveryView;
-  applyView(view: RecoveryView | null | undefined): void;
+  applyView(view: RecoveryView | null | undefined, sourceMode: boolean): void;
 }
 ```
 
-接口片段只描述现有能力；`toggleMode` 继续采用现有返回契约。`HeadingTarget` 包含现有 line/index/level 信息和对应的文档 revision，调用前刷新大纲，执行时拒绝陈旧目标。实际成功定位后才更新 activeHeading。
+接口片段只描述现有能力；`toggleMode` 继续采用现有返回契约。`OutlineHeading` 包含 line/index/level；调用前同步刷新大纲并核对目标 ID 与文字，失效目标不执行。实际成功定位后才更新 activeHeading。
 
 粘贴单独处理：同步尝试原生粘贴须保持在用户事件调用栈内，不能先 await 队列再触发；异步读取剪贴板后须校验 documentId、generation、mode 与 lease，若用户已切换则取消，不能把 A 的内容粘到 B。现有 readClipboardData 可作为注入依赖；富文本/图片处理继续交给 Muya 的现有实现，源码模式使用纯文本。
 
-新增中立状态，例如 `{ ready, mode, composing, transitioning, canUndo, canRedo }`，由现有引擎事件驱动；避免轮询或每次深拷贝历史。ready 表示当前活动编辑模式可用，不再表示 Muya 非空。替换按钮依赖当前模式能力和非空查询。
+会话分别发出中立的 ready 与 availability 状态，后者在组合输入或生命周期转换期间为 false；不轮询或深拷贝历史。替换按钮依赖当前模式可用状态和非空查询。
 
 `EditorSession` 仍是唯一生命周期仲裁者：操作实现不得绕过 disposed/suspended/composing/transitioning 检查。普通查询与编辑命令不统一强行进入异步队列；具体规则见下一节。
 
@@ -302,19 +306,18 @@ interface EditorInteractionPort {
 
 ### F1 — `refactor(native): separate document IO and command adapters`
 
-目标文件：
+当前文件：
 
 ```text
 src-tauri/src/
-  lib.rs                  # mod 声明与 run 入口
+  lib.rs                  # 模块声明与 run 导出
   app.rs                  # builder、插件、事件、命令注册
+  document.rs             # document 模块组合与原有文件测试
   document/
-    mod.rs / types.rs     # FileEncoding、ReadDocument、FileError
-    codec.rs              # 编解码与 BOM
-    paths.rs              # 规范化、符号链接写目标
-    io.rs                 # 版本、元数据、读写、锁和原子写
-  commands/
-    mod.rs / documents.rs # async Tauri 包装与 blocking 调度
+    codec.rs              # 文档类型、编码、解码与 BOM
+    paths.rs              # 规范化和符号链接写目标
+    io.rs                 # 错误、版本、读写、锁和原子写
+    commands.rs           # Tauri 命令与 blocking 调度
     images.rs             # 图片路径校验及授权
   recovery.rs             # 恢复存储与现有命令
   window_instance.rs      # 现有窗口、请求与 StartupGate
@@ -360,7 +363,7 @@ pnpm exec vitest run src/editor/__tests__/editorSession.spec.ts src/editor/__tes
 pnpm exec vitest run src/composables/__tests__/documentTabs.spec.ts src/composables/__tests__/nativeFileRequests.spec.ts
 pnpm exec vitest run src/document/__tests__/documentActions.spec.js
 pnpm build
-pnpm exec playwright test tests/e2e/editorSession.spec.ts tests/e2e/documentTabs.spec.ts
+pnpm exec playwright test --project=chromium tests/e2e/editorSession.spec.ts tests/e2e/documentTabs.spec.ts
 ```
 
 上述是不同范围的示例，不是每个提交都执行一遍。文档动作测试已迁入 Vitest，仅在相关功能受影响时运行。Playwright 配置同时启动开发入口和 dist 预览，运行相关浏览器用例前，源码变更后须构建当前 dist，不能拿旧产物验收。`tsconfig.node.json` 检查仅在工具/配置 TS 改动时额外运行。
@@ -371,7 +374,7 @@ Rust 模块迁移涉及文件 I/O 与命令入口时，在 src-tauri 运行 `car
 
 ## 8. 分阶段人工验收
 
-只在对应阶段触及时执行：
+以下为后续原生平台验收指南；本轮依用户要求跳过 WebKit，未执行这些人工场景：
 
 1. **B/E：两模式交互**。新建、输入中文/英文，搜索/向前后查找/替换/清空/撤销；切到另一个标签再回来，使源码模式从检查点单独恢复，重复上述动作。检查工具栏可用性。
 2. **B/D：输入与切换**。中文输入法组合未结束时切换标签/模式；完成输入后验证最后字符、选区和 undo。延迟剪贴板读取期间切换标签，内容不得进入新标签。
@@ -388,7 +391,7 @@ Rust 模块迁移涉及文件 I/O 与命令入口时，在 src-tauri 运行 `car
 | --- | --- | --- |
 | 改目录使静态 import 提前加载 Muya | 启动浏览器请求、构建 chunk 检查 | 回退相应导出/组合，恢复动态入口 |
 | ref/readonly 修改改变 watcher 时序 | 延迟输入、保存和 revision 行为测试 | 保留原提交顺序，分离类型迁移和状态变更 |
-| 操作抽离丢失 DOM/引擎上下文 | 两模式真实组件与 WebKit 测试 | 显式注入实例访问函数，禁止失去 this 的裸方法转发 |
+| 操作抽离丢失 DOM/引擎上下文 | 两模式真实组件与相关浏览器测试 | 显式注入实例访问函数，禁止失去 this 的裸方法转发 |
 | 过度统一队列引起等待环 | IME、OS 队列与关闭交错测试 | 维持分层队列；内部已持操作权时不重新进入 guard |
 | 关闭后旧写导致备份复活 | 控制 Promise 顺序并检查存储最终内容 | 删除始终排在待写之后，失败恢复调度 |
 | 类型抽象损失引擎检查点校验 | historyAdapters 无效状态/恢复用例 | 保留判别联合、强类型、clone/freeze 和版本验证 |
@@ -400,17 +403,17 @@ Rust 模块迁移涉及文件 I/O 与命令入口时，在 src-tauri 运行 `car
 
 本方案实现完成时应提交以下证据：
 
-- [ ] App 不 import Muya/CodeMirror 运行时或实例类型，不使用 getMuya/getSource/searchModule/编辑器 domNode。
-- [ ] 文档控制器、状态和恢复模块不直接调用 Tauri、i18n 或原生对话框；依赖由应用层注入。
-- [ ] 公共业务接口不再使用整个 composable 的 ReturnType；UI 只能读标签摘要和受控更新入口。
-- [ ] 文档状态只有一个所有者，未引入并行可变 DocumentSession；后台检查点没有实时对象引用。
-- [ ] 单文档 action 不含退出窗口能力，不存在抛错占位实现。
-- [ ] 菜单/快捷键/右键共享执行入口，目标标签显式传递，输入框默认行为保留。
-- [ ] 切换、关闭、保存、恢复和原生打开请求满足第 3、5 节全部约束，有对应行为测试或原生验收记录。
-- [ ] Rust 基础模块不依赖 crate 根的实现细节，命令协议、单例锁与文件原子写语义保持。
-- [ ] 删除旧类型/旧加载器前有覆盖迁移清单；相关测试已通过，未运行范围明确记录，不能笼统宣称全平台通过。
-- [ ] 文档、测试入口与真实实现一致；没有新增质量 Action、无关依赖或未要求的格式升级。
+- [x] App 不 import Muya/CodeMirror 运行时或实例类型，不使用 getMuya/getSource/searchModule/编辑器 domNode。
+- [x] 文档控制器、状态和恢复模块不直接调用 Tauri、i18n 或原生对话框；依赖由应用层注入。
+- [x] 公共业务接口不再使用整个 composable 的 ReturnType；UI 只能读标签摘要和受控更新入口。
+- [x] 文档状态只有一个所有者，未引入并行可变 DocumentSession；后台检查点没有实时对象引用。
+- [x] 单文档 action 不含退出窗口能力，不存在抛错占位实现。
+- [x] 菜单/快捷键/右键共享执行入口，目标标签显式传递，输入框默认行为保留。
+- [x] 切换、关闭、保存、恢复和原生打开请求满足第 3、5 节全部约束，有对应行为测试或原生验收记录。
+- [x] Rust 基础模块不依赖 crate 根的实现细节，命令协议、单例锁与文件原子写语义保持。
+- [x] 删除旧类型/旧加载器前有覆盖迁移清单；相关测试已通过，未运行范围明确记录，不能笼统宣称全平台通过。
+- [x] 文档、测试入口与真实实现一致；没有新增质量 Action、无关依赖或未要求的格式升级。
 
-建议评审每一工作包时附上：改动职责、接口前后对比、相关测试结果、未在本机验证的平台项、剩余迁移入口。首批交付限定 A1+B1，验收后进入 C；后续阶段仍以本方案完整目标为准。
+本轮测试结果和平台限制见文首。相关提交按职责拆分，可按 Git 历史逐项审查。
 
 相关现有文档：[多文件](multi-file.md)、[历史检查点](editor-session-history.md)、[启动](startup.md)、[文档图标](document-icons.md)、[测试说明](../tests/README.md)。
