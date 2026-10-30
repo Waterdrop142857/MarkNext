@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from "../i18n";
+const appIcon = `${import.meta.env.BASE_URL}icons/marknext.svg`;
 withDefaults(
   defineProps<{
     dirty?: boolean;
@@ -23,6 +24,7 @@ defineEmits<{
 <template>
   <header class="app-titlebar ui-controls" @selectstart.prevent>
     <div class="titlebar-left" @mousedown="$emit('drag', $event)">
+      <img class="app-logo-icon" :src="appIcon" width="20" height="20" alt="" aria-hidden="true" draggable="false" />
       <span class="app-logo">MarkNext</span>
     </div>
 

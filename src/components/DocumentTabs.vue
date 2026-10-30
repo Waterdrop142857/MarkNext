@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import { t } from "../i18n";
+const markdownIcon = `${import.meta.env.BASE_URL}icons/markdown.svg`;
 
 const props = defineProps<{
   tabs: readonly { id: string; title: string; path: string | null; dirty: boolean; external: boolean }[];
@@ -62,6 +63,7 @@ watch([() => props.activeId, () => props.busy], async () => {
         <button :id="`document-tab-${tab.id}`" type="button" role="tab" :aria-selected="tab.id === activeId" aria-controls="document-panel"
           :tabindex="tab.id === activeId ? 0 : -1" :disabled="busy" :title="tab.path ?? tab.title" class="document-tab-select"
           @click="emit('activate', tab.id)" @keydown="navigate($event, index)">
+          <img v-if="!tab.path || /\.(md|markdown)$/i.test(tab.path)" class="document-tab-icon" :src="markdownIcon" width="18" height="18" alt="" aria-hidden="true" draggable="false" />
           <span class="document-tab-name">{{ tab.title }}</span>
           <span v-if="tab.dirty" class="tab-dirty" :aria-label="t('tabs.unsaved')">●</span>
           <span v-if="tab.external" class="tab-conflict" :aria-label="t('tabs.external')">!</span>
@@ -87,6 +89,7 @@ watch([() => props.activeId, () => props.busy], async () => {
 .document-tab.active:hover { background: var(--app-footer-bg); }
 .document-tabs button { --ui-control-height: 30px; border: 0; border-radius: var(--app-ui-control-radius); background: transparent; color: inherit; cursor: pointer; }
 .document-tab-select { min-width: 0; flex: 1; gap: 6px; padding-inline: 10px 4px; }
+.document-tab-icon { display: block; flex-shrink: 0; }
 /* Center the resolved font's own line box, including CJK fallback fonts.
    The button keeps its fixed height independently of these text metrics. */
 .document-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: normal; }

@@ -105,10 +105,13 @@
 .titlebar-left {
   display: flex;
   align-items: center;
+  gap: 8px;
   height: 100%;
   padding: 0 16px;
   flex: 0 0 auto;
 }
+
+.app-logo-icon { display: block; flex-shrink: 0; }
 
 .app-logo {
   font-weight: 700;

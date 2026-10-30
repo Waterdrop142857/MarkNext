@@ -19,7 +19,8 @@
     "test:shortcuts": "vitest run src/composables/__tests__/shortcuts.spec.ts",
     "test:selection": "vitest run src/components/editor/__tests__/webkitSelectionPainter.spec.ts",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "icons:generate": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
