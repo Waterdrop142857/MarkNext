@@ -16,7 +16,8 @@ NSIS 安装器在安装目录、快捷方式页面之后提供中/英文的“�
 命令和图标路径均加引号以支持含空格的安装路径。
 卸载移除本程序的 ProgID、候选项、Capabilities 和文件图标，不删除其他候选项。
 旧版 Tauri 的通用关联只在打开命令仍指向本安装目录时清理；扩展名仍指向旧关联时，
-才恢复其备份默认值。MSI、Linux 和 macOS 继续使用原有 Tauri 配置。
+才恢复其备份默认值。MSI 继续使用原有 Tauri 默认关联；Linux/macOS 的独立文档
+图标见 [跨平台说明](../../docs/document-icons.md)。
 
 `installer.nsi` 基于已锁定的 **Tauri CLI v2.11.4** 官方模板：
 <https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.4/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi>

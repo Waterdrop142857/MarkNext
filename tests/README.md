@@ -91,6 +91,10 @@ MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、
 
 ## 覆盖边界
 
+跨平台文档图标测试见 [文档图标说明](../docs/document-icons.md)：Vitest 检查类型与
+资源引用，Linux GTK 集成测试验证主题优先级，安装包工作流验证实际 DEB/AppDir
+或 macOS `.app` 内的图标和元数据。
+
 Windows NSIS 安装器有独立的真实安装回归脚本：
 `pwsh -NoProfile -File scripts/test-windows-installer.ps1 -Installer <setup.exe>`。
 必须在无 MarkNext 安装的一次性 Windows 用户账户或虚拟机中运行，具体范围见

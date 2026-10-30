@@ -64,6 +64,12 @@
         "description": "Text document"
       }
     ],
+    "macOS": {
+      "infoPlist": "macos/Info.plist",
+      "files": {
+        "Resources/markdown.icns": "icons/markdown.icns"
+      }
+    },
     "windows": {
       "nsis": {
         "template": "windows/installer.nsi",
@@ -72,11 +78,35 @@
       }
     },
     "linux": {
+      "appimage": {
+        "files": {
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-x-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-markdown.png": "icons/markdown.png",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-x-markdown.png": "icons/markdown.png"
+        }
+      },
       "deb": {
-        "desktopTemplate": "templates/marknext.desktop"
+        "desktopTemplate": "templates/marknext.desktop",
+        "files": {
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-x-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-markdown.png": "icons/markdown.png",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-x-markdown.png": "icons/markdown.png"
+        },
+        "postInstallScript": "linux/update-icon-cache.sh",
+        "postRemoveScript": "linux/update-icon-cache.sh"
       },
       "rpm": {
-        "desktopTemplate": "templates/marknext.desktop"
+        "desktopTemplate": "templates/marknext.desktop",
+        "files": {
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/scalable/mimetypes/text-x-markdown.svg": "../public/icons/markdown.svg",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-markdown.png": "icons/markdown.png",
+          "/usr/share/icons/hicolor/512x512/mimetypes/text-x-markdown.png": "icons/markdown.png"
+        },
+        "postInstallScript": "linux/update-icon-cache.sh",
+        "postRemoveScript": "linux/update-icon-cache.sh"
       }
     }
   }

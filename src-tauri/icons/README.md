@@ -22,5 +22,9 @@ Tauri's configured application icons supply the window and installer icons.
 The Windows NSIS installer optionally registers MarkNext in Open With and copies
 `markdown.ico` for its document ProgIDs, separately from the application icon.
 See `../windows/README.md` for registration, upgrade and uninstall behavior.
-Other installers still use Tauri's file-association defaults, which do not expose
-a separate document-icon field. System MIME icon themes are not overridden.
+macOS bundles copy `markdown.icns` to Resources and reference it in document types.
+Linux packages ship SVG/PNG MIME icons in hicolor: active icon themes take priority,
+and MarkNext supplies the fallback. Existing MIME types/default apps are unchanged.
+AppImage desktop integration must export its MIME icons to the host to use them.
+MSI still uses Tauri's default file-association icons.
+See `../../docs/document-icons.md` for platform behavior and verification.

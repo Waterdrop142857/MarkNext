@@ -87,6 +87,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: '-'
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: pnpm exec tauri build --ci --target "$RELEASE_TARGET" --bundles "$RELEASE_BUNDLES" -- --locked
+      - name: Verify packaged document icons
+        if: runner.os == 'Linux' || runner.os == 'macOS'
+        run: node scripts/verify-native-icons.mjs "src-tauri/target/$RELEASE_TARGET/release/bundle"
       - name: Collect installers
         run: |
           node --input-type=module <<'JS'
