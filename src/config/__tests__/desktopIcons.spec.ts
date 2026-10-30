@@ -35,6 +35,21 @@ describe("native document icon contracts", () => {
     expect(Array.from(root.children).some(child => child.textContent === "CFBundleIconFile")).toBe(false);
   });
 
+  it("keeps Windows Open With registration and removal aligned with the shared extensions", () => {
+    const nsis = readFileSync(resolve(tauri, "windows/open-with.nsh"), "utf8");
+    const entries = (operation: "REGISTER" | "REMOVE") => Array.from(nsis.matchAll(
+      new RegExp(`!insertmacro MARKNEXT_${operation}_EXTENSION "([^"\n]+)" "\\$\\{([^}]+)\\}"`, "g"),
+    ), match => [match[1], match[2]]);
+    const expected = bundle.fileAssociations.flatMap((association: { ext: string[]; name: string }) =>
+      association.ext.map(extension => [extension, association.name === "Markdown Document" ? "MARKNEXT_MARKDOWN_PROGID" : "MARKNEXT_TEXT_PROGID"]),
+    );
+    expect(entries("REGISTER")).toEqual(expected);
+    expect(entries("REMOVE")).toEqual(expected);
+    expect(nsis).toContain('File /oname=markdown.ico "${MARKNEXT_DOCUMENT_ICON}"');
+    expect(nsis).toContain('Software\\Classes\\${PROGID}\\DefaultIcon');
+    expect(readFileSync(resolve(tauri, "icons/markdown.ico")).equals(readFileSync(resolve(tauri, "icons/icon.ico")))).toBe(false);
+  });
+
   it("imports the standard Markdown UTI with filename tags and a matching icon", () => {
     const imported = Array.from(value(root, "UTImportedTypeDeclarations").children);
     const markdown = imported.find(type => value(type, "UTTypeIdentifier").textContent === "net.daringfireball.markdown")!;
