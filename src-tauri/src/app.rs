@@ -62,7 +62,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             document::read_file,
             document::canonical_document_path,
-            document::allow_image_file,
+            document::images::allow_image_file,
             document::write_file,
             document::file_version,
             document::file_status,
