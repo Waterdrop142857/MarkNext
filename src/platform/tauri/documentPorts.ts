@@ -4,7 +4,7 @@ import { t } from "../../i18n";
 import { askUnsavedChanges, askOverwrite, askExternalChange, informFileAlreadyOpen, showError } from "../../services/dialogs";
 import { DocumentConflict } from "../../document/errors";
 import type { DocumentErrorContext, DocumentPorts } from "../../document/ports";
-import type { ReadDocument, RecoveryListing } from "../../document/types";
+import { fileEncodings, type FileEncoding, type ReadDocument, type RecoveryListing } from "../../document/types";
 
 const filters = [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }];
 const errorKeys = {
@@ -19,7 +19,11 @@ export function createTauriDocumentPorts(): DocumentPorts {
       canonicalPath: path => invoke<string>("canonical_document_path", { path }),
       async read(path, defaultEncoding) {
         const document = await invoke<ReadDocument>("read_file", { path, defaultEncoding });
-        if (!document || typeof document.version !== "string") throw new Error("Missing document version");
+        if (!document || typeof document.content !== "string" || typeof document.version !== "string"
+          || typeof document.bom !== "boolean" || !fileEncodings.includes(document.encoding as FileEncoding)
+          || (document.stamp !== undefined && typeof document.stamp !== "string")) {
+          throw new Error("Invalid document returned by file reader");
+        }
         return document;
       },
       stamp: path => invoke<string>("file_status", { path }),

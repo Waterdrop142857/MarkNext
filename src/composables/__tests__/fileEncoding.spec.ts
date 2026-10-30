@@ -56,3 +56,17 @@ it("isolates encoding snapshots between queued saves and document generations", 
   ]);
   expect(workspace.fileFormat.value).toEqual({ encoding: "utf-8", bom: false }); expect(workspace.savedMarkdown.value).toBe("second");
 });
+
+
+it("rejects malformed native document data before replacing the current document", async () => {
+  native.invoke.mockResolvedValueOnce({ content: 42, encoding: "utf-8", bom: false, version: "v1" });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const workspace = createDocumentController(() => "utf-8", createTauriDocumentPorts());
+    workspace.newFile(); workspace.markdown.value = "local draft";
+    expect(await workspace.openFile()).toBe(false);
+    expect(workspace.markdown.value).toBe("local draft");
+    expect(workspace.dirty.value).toBe(true);
+    expect(native.message).toHaveBeenCalledOnce();
+  } finally { log.mockRestore(); }
+});
