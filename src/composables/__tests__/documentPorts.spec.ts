@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { createDocumentController } from "../../document/createDocumentController";
-import { useDocumentActions } from "../useDocumentActions";
+import { useDocumentActions } from "../../document/useDocumentActions";
 import type { DocumentPorts } from "../../document/ports";
 
 function memoryPorts(): DocumentPorts {

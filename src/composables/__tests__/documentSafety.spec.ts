@@ -2,7 +2,7 @@ import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import { createDocumentController } from "../../document/createDocumentController";
-import { useDocumentActions } from "../useDocumentActions";
+import { useDocumentActions } from "../../document/useDocumentActions";
 import { useDocumentRecovery } from "../../workspace/useDocumentRecovery";
 import type { RecoverySnapshot } from "../../document/types";
 

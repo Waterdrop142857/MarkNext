@@ -3,7 +3,7 @@ import { createTauriDocumentPorts } from "../../platform/tauri/documentPorts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Muya } from "../../muya";
 import { createDocumentController } from "../../document/createDocumentController";
-import { useDocumentActions, type DocumentAction } from "../useDocumentActions";
+import { useDocumentActions, type DocumentAction } from "../../document/useDocumentActions";
 
 const native = vi.hoisted(() => ({ invoke: vi.fn(), message: vi.fn(), open: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: native.invoke }));

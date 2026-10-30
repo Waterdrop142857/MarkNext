@@ -1,6 +1,6 @@
-import type { RecoverySnapshot } from "../document/types";
-import type { DocumentActionsSource } from "../document/consumers";
-import type { DocumentPrompts } from "../document/ports";
+import type { RecoverySnapshot } from "./types";
+import type { DocumentActionsSource } from "./consumers";
+import type { DocumentPrompts } from "./ports";
 
 export type DocumentAction = "new" | "open" | "save" | "saveAs" | "close" | "reload" | "overwrite";
 

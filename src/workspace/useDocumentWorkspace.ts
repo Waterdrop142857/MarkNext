@@ -1,6 +1,6 @@
 import { computed, nextTick, onScopeDispose, ref, shallowRef, watch, type Ref } from "vue";
 import { createDocumentController } from "../document/createDocumentController";
-import { useDocumentActions, type DocumentAction } from "../composables/useDocumentActions";
+import { useDocumentActions, type DocumentAction } from "../document/useDocumentActions";
 import { useDocumentRecovery } from "./useDocumentRecovery";
 import { useRecoveryCatalog } from "./useRecoveryCatalog";
 import type { ExternalChange, FileEncoding } from "../document/types";

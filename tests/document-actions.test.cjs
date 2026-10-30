@@ -103,7 +103,7 @@ function harness(choices = ['不保存'], options = {}) {
     },
   });
   const chrome = useWindowChrome();
-  const { useDocumentActions } = loadModule('src/composables/useDocumentActions.ts', {
+  const { useDocumentActions } = loadModule('src/document/useDocumentActions.ts', {
     '../services/dialogs': dialogs,
   });
   const documentActions = useDocumentActions(workspace, ports.prompts, {
