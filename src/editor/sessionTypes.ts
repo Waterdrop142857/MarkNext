@@ -3,12 +3,10 @@
  * See docs/editor-session-history.md for ownership and lifecycle invariants.
  * This module must stay type-only: importing a session must not load an editor.
  */
-import type { FileFormat } from "../document/types";
 import type { ISerializedHistory } from "../muya/history";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { TState } from "../muya/state/types";
 import type { IMuyaOptions } from "../muya/types";
-import type { ExternalChange } from "../document/types";
 
 export type DeepReadonly<T> = T extends object
   ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
@@ -113,22 +111,6 @@ export type EditorSessionCheckpoint = {
   };
 };
 
-/** Data owned by a document, independent of any mounted editor instance. */
-export interface DocumentSession {
-  readonly version: 1;
-  readonly identity: DocumentRevision;
-  readonly path: string | null;
-  readonly markdown: string;
-  readonly savedMarkdown: string;
-  readonly fileFormat: Readonly<FileFormat>;
-  readonly diskVersion: string;
-  readonly externalChange: Readonly<ExternalChange> | null;
-  readonly recoveredCopy: boolean;
-  readonly recoveryNeedsSave: boolean;
-  /** Null only before first activation. A suspended edited session needs one. */
-  readonly editor: EditorSessionCheckpoint | null;
-}
-
 /** Distinguishes render activations even when document/revision are unchanged. */
 export interface RendererLease {
   readonly documentId: string;
@@ -158,7 +140,7 @@ export type RestoreResult = {
 };
 
 /**
- * Live, short-lived adapter. Never store this object in DocumentSession.
+ * Live, short-lived adapter. Never store this object in detached document state.
  * capture() flushes and splits the input group before taking a detached copy.
  * If flushing changes the expected revision, return mismatch for a fresh retry.
  * restore() is silent and must validate before mutating its target renderer.
