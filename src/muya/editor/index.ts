@@ -20,6 +20,7 @@ import { hasPick, isHTMLElement } from '../utils';
 import { getBlock } from '../utils/dom';
 import logger from '../utils/logger';
 import { attachDragDropImageHandlers } from './dragDropImage';
+import { attachDragDropTextHandlers } from './dragDropText';
 import { attachLinkMouseHandlers } from './linkMouseEvents';
 
 const debug = logger('editor:');
@@ -290,6 +291,7 @@ export class Editor {
         // as a new `![](src)` block. Cleanup is likewise handled by
         // `detachAllDomEvents`.
         attachDragDropImageHandlers(muya);
+        attachDragDropTextHandlers(muya);
         this.focus();
     }
 

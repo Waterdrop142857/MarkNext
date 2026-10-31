@@ -52,6 +52,7 @@ pnpm exec playwright install --with-deps chromium webkit
 - `diagramRevision.spec.ts` 用受控 renderer 加载和延迟绘制验证旧成功/失败、清空、销毁、移除、重复请求以及 Vega view.finalize 清理。每个版本在独立目标渲染，断言晚到回调无法改写最新预览。
 - `documentImages.spec.ts` 覆盖 POSIX/Windows/UNC、上级目录、中文、空格及编码路径，另存为后的目录更新，权限请求合并、先授权后加载和失败重试。Rust 单元测试验证只接受存在的图片文件，并拒绝非图片、目录、缺失文件和伪装扩展名的符号链接。
 - `p2.spec.ts` 在两种浏览器里验证真实应用的搜索、源码历史与文件/模式边界，行内/引用/HTML 图片目录更新，以及 640×480、800×500、1024×720 下两种编辑模式的内部滚动。图片的原生 convertFileSrc 在测试入口映射到本地 SVG fixture，磁盘授权由 IPC mock 记录；这不是原生 asset 协议的端到端测试。
+- `textDrag.spec.ts` 用真实鼠标拖动文字，验证同段及跨段移动后的正文/源码一致、单步撤销重做、Backspace 与 Ctrl+A 删除，避免浏览器复制出未关联文档节点的“幽灵文字”。`dragDropText.spec.ts` 另覆盖两种落点光标 API、反向选区、复制修饰键、落在原选区内、外部纯文本、过期拖动、输入法/只读保护、图片兼容及监听清理。文字拖放通过文档状态提交；落点无法解析时取消，浏览器的原生拖放插入与删除不直接修改编辑器 DOM。
 
 `tests/e2e/app.html` 是 Vite 开发服务器下的测试入口，先准备 mock 再导入真实 src/main。生产构建只从 index.html 进入，不包含该入口及原生 mocks。另一个测试服务器用 vite preview 提供真实生产 dist。二者端口固定为 4173/4174，严格禁止端口自动切换和复用已有服务，避免测试误连其他实例。
 
