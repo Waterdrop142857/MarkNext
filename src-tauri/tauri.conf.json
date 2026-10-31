@@ -19,6 +19,7 @@
         "minHeight": 600,
         "decorations": false,
         "label": "main",
+        "dragDropEnabled": true,
         "visible": false,
         "backgroundColor": "#1e1e1e"
       }

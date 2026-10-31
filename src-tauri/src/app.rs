@@ -44,6 +44,23 @@ pub fn run() {
             }
         })
         .on_window_event(|window, event| {
+            if window.label() == window_instance::MAIN_WINDOW {
+                if let tauri::WindowEvent::DragDrop(event) = event {
+                    let paths = window_instance::paths_from_drop(
+                        event,
+                        window
+                            .app_handle()
+                            .config()
+                            .bundle
+                            .file_associations
+                            .as_deref()
+                            .unwrap_or_default(),
+                    );
+                    if !paths.is_empty() {
+                        window_instance::deliver(window.app_handle(), paths);
+                    }
+                }
+            }
             if window.label() == window_instance::MAIN_WINDOW
                 && matches!(event, tauri::WindowEvent::CloseRequested { .. })
             {
