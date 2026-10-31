@@ -15,15 +15,63 @@ for (const environment of ["dev", "production"]) for (const theme of ["dark", "l
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(await page.locator("#startup").evaluate(node => getComputedStyle(node).backgroundColor)).toBe(theme === "dark" ? "rgb(30, 30, 30)" : "rgb(245, 245, 245)");
       await expect(page.locator(".app-shell")).toHaveCount(0);
+      expect(editorRequests).toEqual([]);
     } finally { release(); }
     await expect(page.locator(".empty-state")).toBeVisible();
     await expect(page.locator("#startup")).toHaveCount(0);
-    expect(editorRequests).toEqual([]);
+    await expect.poll(() => editorRequests.length).toBe(1);
+    await expect(page.locator(".mu-editor, .CodeMirror, .document-tab")).toHaveCount(0);
     await page.keyboard.press("Control+N");
     await expect(page.locator(".mu-editor")).toBeVisible();
-    expect(editorRequests.length).toBeGreaterThan(0);
+    expect(editorRequests).toHaveLength(1);
   });
 }
+
+test("first New shares a pending background load without creating a hidden editor", async ({ page }) => {
+  let release!: () => void;
+  const loading = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  const unusedModules: string[] = [];
+  page.on("request", request => {
+    if (/\/src\/muya\/(?:ui\/emojiSelector\/|state\/markdownToHtml\.ts)/.test(request.url())) unusedModules.push(request.url());
+  });
+  await page.route("**/src/components/EditorSession.vue", async route => { requests++; await loading; await route.continue(); });
+  await page.goto("/tests/e2e/app.html", { waitUntil: "commit" });
+  try {
+    await expect(page.locator(".empty-state")).toBeVisible();
+    await expect.poll(() => requests).toBe(1);
+    await expect(page.locator(".mu-editor, .CodeMirror, .document-tab")).toHaveCount(0);
+    await page.keyboard.press("Control+N");
+    await expect(page.locator('.document-tabs[aria-busy="true"]')).toBeVisible();
+    await expect(page.locator(".mu-editor")).toHaveCount(0);
+  } finally { release(); }
+  await expect(page.locator(".mu-editor")).toBeVisible();
+  await expect(page.locator(".document-tab")).toHaveCount(1);
+  expect(requests).toBe(1);
+  expect(unusedModules).toEqual([]);
+});
+
+isolatedTest("a failed background editor fetch leaves the shell usable and reload recovers", async ({ page }) => {
+  let failed = false;
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.addInitScript(() => window.addEventListener("vite:preloadError", () => { document.documentElement.dataset.editorPreloadFailed = "true"; }));
+  await page.route("**/assets/EditorSession-*.js", route => {
+    if (!failed) { failed = true; return route.abort(); }
+    return route.continue();
+  });
+  await page.goto("http://127.0.0.1:4174");
+  await isolatedExpect.poll(() => failed).toBe(true);
+  await isolatedExpect(page.locator("html")).toHaveAttribute("data-editor-preload-failed", "true");
+  await isolatedExpect(page.locator(".empty-state")).toBeVisible();
+  await isolatedExpect(page.locator(".mu-editor, .document-tab")).toHaveCount(0);
+  // Browsers may cache a failed module fetch until the page is reloaded.
+  await page.reload();
+  await isolatedExpect(page.locator(".empty-state")).toBeVisible();
+  await page.keyboard.press("Control+N");
+  await isolatedExpect(page.locator(".mu-editor")).toBeVisible();
+  expect(errors).toEqual([]);
+});
 
 isolatedTest("failed application import presents a reload action and a retry starts successfully", async ({ page }) => {
   let reject = true;

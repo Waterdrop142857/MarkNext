@@ -1,6 +1,7 @@
 import { createApp, nextTick } from "vue";
 import { initializeI18n } from "./i18n";
 import { failStartup, finishStartup, prepareStartup, revealStartup } from "./services/startup";
+import { scheduleEditorWarmup } from "./editor/loadEditorSession";
 import "./styles.css";
 import "./styles/app.css";
 import "./styles/fluent-context-menu.css";
@@ -16,6 +17,8 @@ async function start() {
     await nextTick();
     await revealStartup(generation);
     finishStartup();
+    const cancelWarmup = scheduleEditorWarmup();
+    if (import.meta.hot) import.meta.hot.dispose(cancelWarmup);
   }
   catch (error) {
     console.error("MarkNext startup failed", error);

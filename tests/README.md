@@ -39,7 +39,7 @@ pnpm exec playwright install --with-deps chromium webkit
 
 多文件与单窗口新增覆盖：`src/composables/__tests__/documentTabs.spec.ts` / `nativeFileRequests.spec.ts`、浏览器 `documentTabs.spec.ts` / `nativeFiles.spec.ts` 及 Rust `window_instance` 测试。覆盖每文件历史/模式隔离、唯一活动渲染器、关闭事务、路径去重、恢复、原生请求队列及安装器配置。浏览器原生 IPC 仍使用官方 mocks，窗口管理器焦点和安装后的文件关联按 [手动指南](../docs/multi-file.md#手动验收) 在对应系统验证。
 
-冷启动覆盖：`src/services/__tests__/startup.spec.ts`、浏览器 `startup.spec.ts` 及 Rust `StartupGate` 测试验证前置主题、开发/生产入口延迟、编辑器按需加载、启动失败重试与窗口就绪代号。流程和人工验收见 [启动设计](../docs/startup.md)。
+冷启动覆盖：`src/services/__tests__/startup.spec.ts`、`src/editor/__tests__/loadEditorSession.spec.ts`、浏览器 `startup.spec.ts` 及 Rust `window_instance::tests` 验证前置主题、开发/生产入口延迟、显示后的空闲预加载与按需加载共享、失败后的重新加载、窗口就绪代号及带值启动参数。流程和人工验收见 [启动设计](../docs/startup.md)。
 
 - Vitest 保留原测试声明的 happy-dom/jsdom 环境。安全净化用例使用 jsdom；happy-dom 对此版本 DOMPurify 的支持不完整，不以它证明净化安全。CSS inline 导入启用真实 KaTeX、Prism、GitHub Markdown 和 exportStyle 内容，避免空字符串产生误通过。
 - `documentOpen.spec.ts` 使用真实 Muya、真实 workspace/actions，并控制 RAF 与 IPC 完成时序。覆盖读取期间排队编辑后的保存/丢弃/取消、已批准版本不重复询问、确认期间的新编辑、读取失败和 generation 变化；读取只执行一次。另覆盖新建、关闭窗口和退出时，确认期间新输入的内容不会被此前的丢弃选择覆盖。

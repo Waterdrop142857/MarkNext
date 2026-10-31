@@ -115,9 +115,21 @@ impl WindowInstance {
 /// resolved against the sending process's cwd, not the existing instance's.
 pub fn paths_from_args(args: impl IntoIterator<Item = String>, cwd: &Path) -> Vec<String> {
     let mut literal = false;
-    args.into_iter()
-        .skip(1)
-        .filter_map(|argument| {
+    let mut arguments = args.into_iter().skip(1).peekable();
+    let mut paths = Vec::new();
+    while let Some(argument) = arguments.next() {
+        // `tauri dev` can append Cargo's color option after the document.
+        // Its value is launcher metadata, not another path to open.
+        if !literal && argument == "--color" {
+            if matches!(
+                arguments.peek().map(String::as_str),
+                Some("auto" | "always" | "never")
+            ) {
+                arguments.next();
+            }
+            continue;
+        }
+        let path = (|| {
             if argument == "--" && !literal {
                 literal = true;
                 return None;
@@ -145,8 +157,12 @@ pub fn paths_from_args(args: impl IntoIterator<Item = String>, cwd: &Path) -> Ve
                 cwd.join(path)
             };
             absolute.into_os_string().into_string().ok()
-        })
-        .collect()
+        })();
+        if let Some(path) = path {
+            paths.push(path);
+        }
+    }
+    paths
 }
 
 pub fn focus_main(app: &tauri::AppHandle, create: bool) {
@@ -380,6 +396,43 @@ mod tests {
             Path::new("."),
         );
         assert_eq!(paths, vec![file.to_str().unwrap().to_owned()]);
+    }
+
+    #[test]
+    fn dev_launcher_color_values_do_not_become_phantom_files() {
+        let cwd = std::env::temp_dir();
+        let document = cwd.join("MARKTEXT_WYSIWYG_CORE.md");
+        for color in ["always", "auto", "never"] {
+            let paths = paths_from_args(
+                [
+                    "target/debug/marknext".to_owned(),
+                    document.to_str().unwrap().to_owned(),
+                    "--no-default-features".to_owned(),
+                    "--color".to_owned(),
+                    color.to_owned(),
+                    "--".to_owned(),
+                ],
+                &cwd,
+            );
+            assert_eq!(paths, vec![document.to_str().unwrap().to_owned()]);
+        }
+    }
+
+    #[test]
+    fn color_option_does_not_consume_documents_or_literal_names() {
+        let cwd = std::env::temp_dir();
+        let paths = paths_from_args(
+            ["marknext", "--color", "notes.md", "--", "--color", "always"].map(String::from),
+            &cwd,
+        );
+        assert_eq!(
+            paths,
+            ["notes.md", "--color", "always"].map(|name| cwd
+                .join(name)
+                .to_str()
+                .unwrap()
+                .to_owned())
+        );
     }
 
     #[test]

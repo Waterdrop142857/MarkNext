@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import type EditorSessionComponent from "./components/EditorSession.vue";
+import { loadEditorSession } from "./editor/loadEditorSession";
 import TitleBar from "./components/TitleBar.vue";
 import MenuBar from "./components/MenuBar.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -34,12 +35,8 @@ import { appMenus } from "./config/menus";
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
 const EditorSession = shallowRef<typeof EditorSessionComponent | null>(null);
-let editorLoading: Promise<void> | null = null;
-function prepareEditor(): Promise<void> {
-  if (EditorSession.value) return Promise.resolve();
-  return editorLoading ??= import("./components/EditorSession.vue").then(module => {
-    EditorSession.value = module.default;
-  }).finally(() => { editorLoading = null; });
+async function prepareEditor(): Promise<void> {
+  if (!EditorSession.value) EditorSession.value = await loadEditorSession();
 }
 const documentTabs = useDocumentWorkspace(() => preferences.value.defaultEncoding, createTauriDocumentPorts(), {
   editor: () => editorSessionRef.value,
