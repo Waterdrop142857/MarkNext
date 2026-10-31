@@ -15,6 +15,21 @@ function strings(array: Element): string[] { return Array.from(array.children).m
 const root = plist.querySelector("plist > dict")!;
 
 describe("native document icon contracts", () => {
+  it("retains macOS app bundles for verification while uploading only DMG installers", () => {
+    const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/build-installers.yml"), "utf8");
+    const entries = workflow.split(/\n          - os: /).slice(1).map(entry => entry.split(/\n    defaults:/)[0]);
+    const mac = entries.filter(entry => /target: \S+-apple-darwin/.test(entry));
+    expect(mac).toHaveLength(2);
+    for (const entry of mac) {
+      expect(entry).toMatch(/\n            bundles: dmg\n/);
+      expect(entry).toMatch(/\n            build-bundles: app,dmg(?:\n|$)/);
+    }
+    expect(workflow).toContain('BUILD_BUNDLES: ${{ matrix.build-bundles || matrix.bundles }}');
+    expect(workflow).toContain('--bundles "$BUILD_BUNDLES"');
+    expect(workflow).toContain('RELEASE_BUNDLES: ${{ matrix.bundles }}');
+    expect(workflow).toContain("process.env.RELEASE_BUNDLES.split(',')");
+  });
+
   it("keeps every configured file association when overriding macOS document types", () => {
     const types = Array.from(value(root, "CFBundleDocumentTypes").children);
     expect(types).toHaveLength(bundle.fileAssociations.length);

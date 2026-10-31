@@ -37,15 +37,19 @@ jobs:
           - os: macos-15
             target: aarch64-apple-darwin
             bundles: dmg
+            build-bundles: app,dmg
           - os: macos-15
             target: x86_64-apple-darwin
             bundles: dmg
+            build-bundles: app,dmg
     defaults:
       run:
         shell: bash
     env:
       RELEASE_TARGET: ${{ matrix.target }}
       RELEASE_BUNDLES: ${{ matrix.bundles }}
+      # DMG-only builds delete the intermediate .app needed by icon verification.
+      BUILD_BUNDLES: ${{ matrix.build-bundles || matrix.bundles }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -86,7 +90,7 @@ jobs:
           # Ad-hoc macOS signing; no Apple account or paid certificate required.
           APPLE_SIGNING_IDENTITY: '-'
           APPIMAGE_EXTRACT_AND_RUN: '1'
-        run: pnpm exec tauri build --ci --target "$RELEASE_TARGET" --bundles "$RELEASE_BUNDLES" -- --locked
+        run: pnpm exec tauri build --ci --target "$RELEASE_TARGET" --bundles "$BUILD_BUNDLES" -- --locked
       - name: Verify packaged document icons
         if: runner.os == 'Linux' || runner.os == 'macOS'
         run: node scripts/verify-native-icons.mjs "src-tauri/target/$RELEASE_TARGET/release/bundle"

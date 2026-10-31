@@ -66,6 +66,8 @@ MSI 仍使用 Tauri 默认文件关联配置，尚未单独适配文档图标。
 - 构建后运行 `node scripts/verify-native-icons.mjs <target/release/bundle>`：
   Linux 校验最终 DEB 归档与 AppDir 的实际图标字节；macOS 用系统 `plutil` 检查
   `.app` 内最终 Info.plist 和 ICNS。现有安装包构建工作流包含此资源校验。
+  macOS 显式构建 `app,dmg`，避免 Tauri 在仅请求 DMG 时清理用于验证的 `.app`；
+  上传到 Artifacts/Release 的安装包仍只有 DMG。
 - Linux 手动切换有/无 Markdown 图标的主题，刷新文件管理器后检查回退；测试
   `.md`、`.markdown` 和 `.txt`，后者应继续使用原主题。
 - macOS 安装新的 `.app` 后，在 Finder 选择 MarkNext 打开 Markdown，检查文件
