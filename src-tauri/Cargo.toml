@@ -1,6 +1,6 @@
 [package]
 name = "marknext"
-version = "0.1.0"
+version = "0.2.0"
 description = "MarkNext - a WYSIWYG Markdown editor built with Tauri 2"
 authors = ["MarkNext"]
 edition = "2021"

@@ -67,13 +67,13 @@ main 构建与 Release 共用 [安装包构建工作流](./.github/workflows/bui
 
 ### GitHub Release 自动发布
 
-[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。手动输入 `0.1.0` 会自动规范为 `v0.1.0`，但不会自动创建标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
+[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。手动输入 `0.2.0` 会自动规范为 `v0.2.0`，但不会自动创建标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
 
-发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.1.0`：
+发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.2.0`：
 
 ```bash
-git tag -a v0.1.0 -m "MarkNext v0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "MarkNext v0.2.0"
+git push origin v0.2.0
 ```
 
 标签必须先创建并推送到远端，且与应用版本完全一致。运行界面选择 `main` 不等于创建版本标签；缺少标签时工作流会在 checkout 前给出明确错误。`v0.2.0-beta.1` 等带预发布后缀的标签会创建 Prerelease；稳定版本发布后标记为 Latest。
