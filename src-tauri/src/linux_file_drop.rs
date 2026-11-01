@@ -18,16 +18,55 @@ pub fn configure(config: &mut tauri::utils::config::Config) {
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::new("linux-file-drop")
+        .on_navigation(|webview, url| {
+            let app = webview.app_handle();
+            let Some(paths) = file_navigation(
+                webview.label(),
+                url,
+                app.config()
+                    .bundle
+                    .file_associations
+                    .as_deref()
+                    .unwrap_or_default(),
+            ) else {
+                return true;
+            };
+            // WebKit's default file-drop action can replace the application
+            // with the dropped file. That navigation starts our startup gate,
+            // hides the editor, and cannot report startup_ready. Keep the page
+            // and deliver supported local files through the document queue.
+            trace("blocked local-file navigation; checking document fallback");
+            if !paths.is_empty() {
+                if let Err(error) = window_instance::queue_drop(app, paths) {
+                    eprintln!("Unable to enqueue file-navigation document: {error}");
+                } else {
+                    trace("file-navigation document queued");
+                }
+            }
+            false
+        })
         .on_webview_ready(|webview| {
             if webview.label() != MAIN_WINDOW {
                 return;
             }
             let app = webview.app_handle().clone();
+            trace("main webview ready; installing GTK receiver");
             if let Err(error) = webview.with_webview(move |view| attach(&view.inner(), app)) {
                 eprintln!("Unable to register Linux file-drop receiver: {error}");
             }
         })
         .build()
+}
+
+/// None permits normal app navigation; Some always blocks replacement of the
+/// app, including unsupported/foreign file URLs that must never be read.
+fn file_navigation(
+    label: &str,
+    url: &tauri::Url,
+    associations: &[tauri::utils::config::FileAssociation],
+) -> Option<Vec<String>> {
+    (label == MAIN_WINDOW && url.scheme() == "file")
+        .then(|| window_instance::paths_from_drop_inputs(&[url.to_string()], associations))
 }
 
 #[derive(Default)]
@@ -91,8 +130,9 @@ fn finish(app: &tauri::AppHandle, context: &gdk::DragContext, paths: Vec<String>
 }
 
 fn trace(message: &str) {
-    if std::env::var_os("MARKNEXT_DEBUG_FILE_DROP").is_some() {
-        eprintln!("[file-drop] {message}");
+    if cfg!(debug_assertions) || std::env::var_os("MARKNEXT_DEBUG_FILE_DROP").is_some() {
+        // Use stdout so diagnostics don't depend on the dev CLI's stderr forwarding.
+        println!("[file-drop] {message}");
     }
 }
 
@@ -115,7 +155,18 @@ fn attach(view: &impl IsA<gtk::Widget>, app: tauri::AppHandle) {
     ));
     let state: Rc<RefCell<Option<Drag>>> = Rc::new(RefCell::new(None));
     let motion_state = state.clone();
+    let last_seen: RefCell<Option<gdk::DragContext>> = RefCell::new(None);
     view.connect_drag_motion(move |widget, context, _, _, time| {
+        let first_motion = last_seen.borrow().as_ref() != Some(context);
+        if first_motion {
+            trace(&format!(
+                "GTK drag entered: internal={}, uri={}, actions={:?}",
+                context.drag_get_source_widget().is_some(),
+                context.list_targets().contains(&uri),
+                context.actions()
+            ));
+            last_seen.replace(Some(context.clone()));
+        }
         if context.drag_get_source_widget().is_some()
             || !context.actions().contains(gdk::DragAction::COPY)
             || !context.list_targets().contains(&uri)
@@ -240,6 +291,56 @@ fn attach(view: &impl IsA<gtk::Widget>, app: tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn navigate(url: &str) -> Option<Vec<String>> {
+        let config: tauri::utils::config::Config =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        file_navigation(
+            MAIN_WINDOW,
+            &tauri::Url::parse(url).unwrap(),
+            config.bundle.file_associations.as_deref().unwrap(),
+        )
+    }
+
+    #[test]
+    fn dropped_file_navigation_is_replaced_with_document_delivery() {
+        assert_eq!(
+            navigate("file:///tmp/%E6%96%87%E6%A1%A3%20%23%201.MD"),
+            Some(vec!["/tmp/文档 # 1.MD".into()])
+        );
+    }
+
+    #[test]
+    fn unsafe_or_unsupported_file_navigation_is_blocked_without_opening() {
+        for url in [
+            "file:///tmp/picture.png",
+            "file:///tmp/page.html",
+            "file://foreign-host/tmp/secret.md",
+            "file:///tmp/notes.md?untrusted=1",
+        ] {
+            assert_eq!(navigate(url), Some(Vec::new()), "{url}");
+        }
+    }
+
+    #[test]
+    fn normal_application_navigation_remains_available() {
+        for url in [
+            "http://localhost:1420/",
+            "tauri://localhost/",
+            "https://tauri.localhost/",
+            "about:blank",
+        ] {
+            assert_eq!(navigate(url), None, "{url}");
+        }
+        assert_eq!(
+            file_navigation(
+                "other",
+                &tauri::Url::parse("file:///tmp/notes.md").unwrap(),
+                &[]
+            ),
+            None
+        );
+    }
 
     #[test]
     fn data_before_drop_only_delivers_once_after_release() {
