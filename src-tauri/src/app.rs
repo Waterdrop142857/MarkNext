@@ -20,6 +20,13 @@ fn open_devtools(_app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    #[cfg(target_os = "linux")]
+    let context = {
+        let mut context = context;
+        crate::linux_file_drop::configure(context.config_mut());
+        context
+    };
     let instance = window_instance::WindowInstance::default();
     let cwd = std::env::current_dir().unwrap_or_default();
     let initial = window_instance::paths_from_args(
@@ -30,6 +37,8 @@ pub fn run() {
         let _ = instance.enqueue(initial);
     }
     let builder = tauri::Builder::default().manage(instance);
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(crate::linux_file_drop::plugin());
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
         let paths = window_instance::paths_from_args(args, Path::new(&cwd));
@@ -88,7 +97,7 @@ pub fn run() {
             window_instance::startup_ready,
             open_devtools
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             #[cfg(target_os = "macos")]

@@ -27,3 +27,7 @@ tauri-plugin-dialog = "2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-single-instance = "~2.4.5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Same GTK binding already used by Tauri/Wry; no second toolkit or version.
+gtk = "0.18.2"

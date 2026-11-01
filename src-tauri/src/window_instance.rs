@@ -221,7 +221,7 @@ fn filter_dropped_paths(
         .collect()
 }
 
-fn paths_from_drop_inputs(
+pub(crate) fn paths_from_drop_inputs(
     inputs: &[String],
     associations: &[tauri::utils::config::FileAssociation],
 ) -> Vec<String> {
@@ -257,7 +257,7 @@ pub fn deliver_drop(app: &tauri::AppHandle, event: &tauri::DragDropEvent) {
     let _ = queue_drop(app, paths);
 }
 
-fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+pub(crate) fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
     if app.state::<WindowInstance>().enqueue_drop(paths)? {
         let _ = app.emit_to(MAIN_WINDOW, OPEN_EVENT, ());
         focus_main(app, false);

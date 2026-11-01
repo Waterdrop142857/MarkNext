@@ -24,9 +24,12 @@
 - 空参数再次启动只聚焦窗口；相对路径基于发送进程工作目录解析。接受本地 `file://` URL，保留空格、中文和 `#`；其他 URL 不转为本地文件读取。以 `-` 开头的文件名可放在 `--` 后。
 - 安装器声明 `.md`、`.markdown`、`.txt` 文件关联。Linux 自定义 `.desktop` 的 `Exec=marknext %U` 接收文件管理器 URL，包含 `text/markdown;text/plain` MIME 类型；DEB、RPM 和 AppImage 复用此模板。Windows/macOS 由 Tauri 安装包生成文件关联元数据。
 - 将一个或多个文档从文件管理器拖到窗口任意位置，在鼠标松开后通过同一原生请求队列打开。支持的扩展名直接读取文件关联配置（当前 `.md`、`.markdown`、`.txt`），不区分大小写；目录、图片及其他类型不作为文档打开。悬停或取消拖动不产生打开请求。使用原生路径，保留中文、空格与 `#`；重复路径仍由工作区规范化并激活已有标签。
-- 同时接收 Tauri 的 Window/Webview 拖放事件；网页捕获阶段接受文件 `dragover`，并在 `drop` 中处理本地 `text/uri-list`、Files 携带的纯文本绝对路径及 WebView 实际暴露的 `File.path`，作为原生事件未送达时的回退。只使用真实绝对路径或本地文件 URI，不把 `File.name` 猜成磁盘路径。文档文件在进入编辑器前拦截，避免 CodeMirror 把拖入文件的正文插入当前文档。网页回退仍经 Rust 校验并进入同一队列，交付失败可重试；原生/网页双重交付在待处理队列去重，已打开的路径继续由工作区去重。
+- Windows/macOS 接收 Tauri 的 Window/Webview 拖放事件。Linux 使用独立 GTK 接收器主动请求 `text/uri-list`，识别支持的文档后通过 `gdk_drag_status(COPY)` 告知系统允许放下，在鼠标松开后才入队；不用 WebKit 对页面元素的接受状态决定是否能打开文档，也不依赖 WebKit 内部的数据类型编号。Linux 主窗口关闭 Wry 自带的接收器，避免两个接收器提前结束同一次拖放；窗口重建仍会安装 GTK 接收器。内部文字拖动及不包含文档的图片/其他拖动继续交给 WebKit，打开文档不移动或删除源文件。
+- 网页捕获阶段接受文件 `dragover`，并在 `drop` 中处理本地 `text/uri-list`、Files 携带的纯文本绝对路径及 WebView 实际暴露的 `File.path`，作为原生事件未送达时的回退。只使用真实绝对路径或本地文件 URI，不把 `File.name` 猜成磁盘路径。文档文件在进入编辑器前拦截，避免 CodeMirror 把拖入文件的正文插入当前文档。网页回退仍经 Rust 校验并进入同一队列，交付失败可重试；原生/网页双重交付在待处理队列去重，已打开的路径继续由工作区去重。
 
 文件关联需使用重新构建的安装包安装后验证。开发态 `pnpm tauri dev` 不会自动注册文件打开方式。系统默认程序仍由用户在“打开方式”设置中选择；本实现不改写用户的默认关联。
+
+Linux 排查拖放可使用 `MARKNEXT_DEBUG_FILE_DROP=1 pnpm tauri dev`：终端会依次输出 GTK 接收器安装及显示后端、外部 URI 拖动进入、文档 URI 接收、放下入队等阶段，不输出文件路径或正文。GTK 接收器无法弥补合成器不支持的 Wayland/X11 跨协议拖放；遇到没有进入事件的情况应核对双方实际显示后端。
 
 ## 手动验收
 
@@ -46,5 +49,6 @@
 - 浏览器 `documentTabs.spec.ts`、`nativeFiles.spec.ts` 挂载真实 App/Muya/CodeMirror，验证独立历史及销毁、源码光标/滚动、多草稿恢复、关闭保护、标签键盘/右键/中键和原生请求交付。
 - Rust 测试验证本地路径/URL 解析、规范化、队列按 ID 确认和安装器配置；发布构建验证原生链接，Linux DEB 可解包检查实际 `.desktop`。
 - Rust `window_instance::tests` 还验证原生拖放只处理 Drop、按配置筛选扩展名、目录排除、URI 解码、待处理重复批次及进入同一可确认队列。浏览器 `nativeFiles.spec.ts` 模拟 Files/URI 拖放并使用 IPC mock，验证新增标签、重复路径和源码脏文档不被插入文件正文；不代表操作系统真实拖放已经端到端验证。真实文件管理器拖放按上述步骤验收。
+- Linux `linux_file_drop::tests` 在不启动 GTK/WebKit 的情况下验证 URI 先到/松手先到两种时序、只在松手后交付一次、非文档放行及主窗口接收器配置；不代表真实 GTK 信号、鼠标光标或文件管理器拖放已验证。
 
 浏览器测试的 Tauri IPC 使用官方 mocks，不等于真实文件管理器/窗口管理器测试。Windows/macOS 原生焦点及安装后关联需在各自系统按上述步骤验收；Linux 的原生单实例与最终桌面关联也应使用实际安装包验证。
