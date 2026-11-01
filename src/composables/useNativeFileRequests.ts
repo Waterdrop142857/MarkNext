@@ -1,6 +1,7 @@
 import { onMounted, onScopeDispose, ref } from "vue";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { attachDocumentFileDrop } from "../services/documentFileDrop";
 
 interface OpenRequest { id: number; paths: string[] }
 
@@ -10,6 +11,8 @@ export function useNativeFileRequests(openPaths: (paths: readonly string[]) => P
   let disposed = false, draining = false, again = false;
   let unlisten: UnlistenFn | null = null;
   let starting: Promise<void> | null = null;
+  const droppedBatches: string[][] = [];
+  let detachDrop: (() => void) | null = null;
 
   async function drain() {
     if (disposed || !isTauri()) return;
@@ -18,6 +21,12 @@ export function useNativeFileRequests(openPaths: (paths: readonly string[]) => P
     try {
       do {
         again = false;
+        while (droppedBatches.length && !disposed) {
+          await invoke("queue_dropped_files", { paths: droppedBatches[0] });
+          if (disposed) return;
+          droppedBatches.shift();
+        }
+        if (disposed) return;
         const requests = await invoke<OpenRequest[]>("pending_open_requests");
         for (const request of requests) {
           if (disposed) return;
@@ -53,9 +62,17 @@ export function useNativeFileRequests(openPaths: (paths: readonly string[]) => P
     return task;
   }
   const focus = () => { void drain(); };
-  onMounted(() => { window.addEventListener("focus", focus); void start(); });
+  onMounted(() => {
+    window.addEventListener("focus", focus);
+    if (isTauri()) detachDrop = attachDocumentFileDrop(window, paths => {
+      droppedBatches.push(paths);
+      void drain();
+    });
+    void start();
+  });
   onScopeDispose(() => {
     disposed = true; unlisten?.(); unlisten = null;
+    detachDrop?.(); detachDrop = null;
     window.removeEventListener("focus", focus);
   });
   return { failed, retry: start };

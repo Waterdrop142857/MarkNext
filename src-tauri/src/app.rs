@@ -43,22 +43,17 @@ pub fn run() {
                 window_instance::begin_startup(webview.app_handle());
             }
         })
+        .on_webview_event(|webview, event| {
+            if webview.label() == window_instance::MAIN_WINDOW {
+                if let tauri::WebviewEvent::DragDrop(event) = event {
+                    window_instance::deliver_drop(webview.app_handle(), event);
+                }
+            }
+        })
         .on_window_event(|window, event| {
             if window.label() == window_instance::MAIN_WINDOW {
                 if let tauri::WindowEvent::DragDrop(event) = event {
-                    let paths = window_instance::paths_from_drop(
-                        event,
-                        window
-                            .app_handle()
-                            .config()
-                            .bundle
-                            .file_associations
-                            .as_deref()
-                            .unwrap_or_default(),
-                    );
-                    if !paths.is_empty() {
-                        window_instance::deliver(window.app_handle(), paths);
-                    }
+                    window_instance::deliver_drop(window.app_handle(), event);
                 }
             }
             if window.label() == window_instance::MAIN_WINDOW
@@ -87,6 +82,7 @@ pub fn run() {
             recovery::recovery_write,
             recovery::recovery_remove,
             window_instance::pending_open_requests,
+            window_instance::queue_dropped_files,
             window_instance::acknowledge_open_request,
             window_instance::startup_generation,
             window_instance::startup_ready,

@@ -64,6 +64,14 @@ mockIPC((command, args) => {
   if (command === "startup_generation") return 1;
   if (command === "startup_ready") { fixture.startupReady.push({ generation: Number(payload.generation), dark: Boolean(payload.dark) }); return; }
   if (command === "pending_open_requests") return structuredClone(fixture.openRequests);
+  if (command === "queue_dropped_files") {
+    const paths = (payload.paths as string[]).map(value => value.startsWith("file:") ? decodeURIComponent(new URL(value).pathname) : value)
+      .filter(value => value.startsWith("/") && /\.(md|markdown|txt)$/i.test(value));
+    if (paths.length && !fixture.openRequests.some(request => JSON.stringify(request.paths) === JSON.stringify(paths))) {
+      return fixture.deliverFiles(paths);
+    }
+    return;
+  }
   if (command === "acknowledge_open_request") {
     fixture.openRequestAcks.push(Number(payload.id));
     fixture.openRequests = fixture.openRequests.filter(request => request.id !== payload.id);

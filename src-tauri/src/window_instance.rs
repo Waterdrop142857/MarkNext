@@ -87,6 +87,25 @@ impl WindowInstance {
         Ok(id)
     }
 
+    fn enqueue_drop(&self, paths: Vec<String>) -> Result<bool, String> {
+        if paths.is_empty() {
+            return Ok(false);
+        }
+        let mut queue = self
+            .queue
+            .lock()
+            .map_err(|_| "open request lock poisoned")?;
+        // A WebView may deliver both native and DOM drops. Pending duplicates
+        // share the same request; later intentional drops still activate tabs.
+        if queue.requests.iter().any(|request| request.paths == paths) {
+            return Ok(false);
+        }
+        queue.next_id += 1;
+        let id = queue.next_id;
+        queue.requests.push_back(OpenRequest { id, paths });
+        Ok(true)
+    }
+
     fn pending(&self) -> Result<Vec<OpenRequest>, String> {
         self.queue
             .lock()
@@ -174,6 +193,13 @@ pub fn paths_from_drop(
     let tauri::DragDropEvent::Drop { paths, .. } = event else {
         return Vec::new();
     };
+    filter_dropped_paths(paths, associations)
+}
+
+fn filter_dropped_paths(
+    paths: &[PathBuf],
+    associations: &[tauri::utils::config::FileAssociation],
+) -> Vec<String> {
     paths
         .iter()
         .filter(|path| {
@@ -193,6 +219,70 @@ pub fn paths_from_drop(
         })
         .filter_map(|path| path.to_str().map(str::to_owned))
         .collect()
+}
+
+fn paths_from_drop_inputs(
+    inputs: &[String],
+    associations: &[tauri::utils::config::FileAssociation],
+) -> Vec<String> {
+    let paths = inputs
+        .iter()
+        .filter_map(|value| {
+            if value
+                .get(..5)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("file:"))
+            {
+                let url = tauri::Url::parse(value).ok()?;
+                if url.query().is_some() || url.fragment().is_some() {
+                    return None;
+                }
+                url.to_file_path().ok()
+            } else {
+                Some(PathBuf::from(value))
+            }
+        })
+        .collect::<Vec<_>>();
+    filter_dropped_paths(&paths, associations)
+}
+
+pub fn deliver_drop(app: &tauri::AppHandle, event: &tauri::DragDropEvent) {
+    let paths = paths_from_drop(
+        event,
+        app.config()
+            .bundle
+            .file_associations
+            .as_deref()
+            .unwrap_or_default(),
+    );
+    let _ = queue_drop(app, paths);
+}
+
+fn queue_drop(app: &tauri::AppHandle, paths: Vec<String>) -> Result<(), String> {
+    if app.state::<WindowInstance>().enqueue_drop(paths)? {
+        let _ = app.emit_to(MAIN_WINDOW, OPEN_EVENT, ());
+        focus_main(app, false);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn queue_dropped_files(
+    app: tauri::AppHandle,
+    window: tauri::Window,
+    paths: Vec<String>,
+) -> Result<(), String> {
+    if window.label() != MAIN_WINDOW {
+        return Err("File drops require the main window".into());
+    }
+    let paths = paths_from_drop_inputs(
+        &paths,
+        app.config()
+            .bundle
+            .file_associations
+            .as_deref()
+            .unwrap_or_default(),
+    );
+    queue_drop(&app, paths)
 }
 
 pub fn focus_main(app: &tauri::AppHandle, create: bool) {
@@ -546,6 +636,41 @@ mod tests {
         );
         std::fs::remove_dir(directory).unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn dom_drop_uris_preserve_encoded_names_and_reject_urls_and_relative_names() {
+        let associations: Vec<tauri::utils::config::FileAssociation> =
+            serde_json::from_value(serde_json::json!([{ "ext": ["md", "txt"] }])).unwrap();
+        let file = std::env::temp_dir().join("文档 # 100%.MD");
+        let uri = tauri::Url::from_file_path(&file).unwrap().to_string();
+        let paths = paths_from_drop_inputs(
+            &[
+                uri.clone(),
+                "https://example.com/file.md".into(),
+                "relative.md".into(),
+                format!("{uri}#fragment"),
+                format!("{uri}?query"),
+                tauri::Url::from_file_path(std::env::temp_dir().join("image.png"))
+                    .unwrap()
+                    .to_string(),
+            ],
+            &associations,
+        );
+        assert_eq!(paths, vec![file.to_str().unwrap().to_owned()]);
+    }
+
+    #[test]
+    fn duplicate_native_and_dom_drops_share_pending_requests_but_can_reopen_after_ack() {
+        let instance = WindowInstance::default();
+        let paths = vec!["/same.md".to_owned()];
+        assert!(instance.enqueue_drop(paths.clone()).unwrap());
+        assert!(!instance.enqueue_drop(paths.clone()).unwrap());
+        assert!(!instance.enqueue_drop(Vec::new()).unwrap());
+        let requests = instance.pending().unwrap();
+        assert_eq!(requests.len(), 1);
+        instance.acknowledge(requests[0].id).unwrap();
+        assert!(instance.enqueue_drop(paths).unwrap());
     }
 
     #[test]

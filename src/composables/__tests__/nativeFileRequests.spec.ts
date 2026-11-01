@@ -14,6 +14,7 @@ beforeEach(() => {
   native.listen.mockImplementation(async (_event, callback) => { notify = callback; return native.stop; });
   native.invoke.mockImplementation(async (command, args) => {
     if (command === "pending_open_requests") return structuredClone(queue);
+    if (command === "queue_dropped_files") { queue.push({ id: 50, paths: args.paths }); return; }
     if (command === "acknowledge_open_request") { queue = queue.filter(request => request.id !== args.id); return; }
     throw new Error(`Unexpected command ${command}`);
   });
@@ -80,4 +81,37 @@ it("handles a reported file failure once and keeps the rest of the queue moving"
 it("does not invoke native APIs in a plain browser", async () => {
   native.isTauri.mockReturnValue(false); mount(); await nextTick();
   expect(native.listen).not.toHaveBeenCalled(); expect(native.invoke).not.toHaveBeenCalled();
+});
+
+function dropUri(uri: string) {
+  const event = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "dataTransfer", { value: { types: ["text/uri-list"], files: [], getData: (type: string) => type === "text/uri-list" ? uri : "" } });
+  window.dispatchEvent(event); return event;
+}
+
+it("queues a DOM drop while an existing file open is pending", async () => {
+  queue.push({ id: 1, paths: ["/first.md"] });
+  let finish!: () => void;
+  const handler = vi.fn<(paths: readonly string[]) => Promise<boolean>>()
+    .mockImplementationOnce(() => new Promise(resolve => { finish = () => resolve(true); })).mockResolvedValue(true);
+  mount(handler);
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  expect(dropUri("file:///tmp/next.md").defaultPrevented).toBe(true);
+  finish(); await vi.waitFor(() => expect(handler).toHaveBeenCalledTimes(2));
+  expect(handler.mock.calls.map(([paths]) => paths)).toEqual([["/first.md"], ["file:///tmp/next.md"]]);
+});
+
+it("retains a failed DOM delivery for retry and removes drop listeners on teardown", async () => {
+  const { receiver, handler, unmount } = mount();
+  await vi.waitFor(() => expect(native.listen).toHaveBeenCalled());
+  const implementation = native.invoke.getMockImplementation()!;
+  let fail = true;
+  native.invoke.mockImplementation((command, args) => command === "queue_dropped_files" && fail ? Promise.reject(new Error("temporary")) : implementation(command, args));
+  dropUri("file:///tmp/retry.md");
+  await vi.waitFor(() => expect(receiver.failed.value).toBe(true));
+  expect(handler).not.toHaveBeenCalled();
+  fail = false; await receiver.retry();
+  expect(handler).toHaveBeenCalledWith(["file:///tmp/retry.md"]);
+  expect(receiver.failed.value).toBe(false);
+  unmount(); expect(dropUri("file:///tmp/after.md").defaultPrevented).toBe(false);
 });
