@@ -21,7 +21,7 @@ defineEmits<{
 </script>
 
 <template>
-  <nav class="menu-bar ui-controls" @selectstart.prevent>
+  <nav class="menu-bar ui-controls" @selectstart.prevent @mousedown.prevent>
     <div
       v-for="menu in menus"
       :key="menu.id"
@@ -37,26 +37,27 @@ defineEmits<{
         {{ menu.label }}
       </button>
       <div v-if="!menu.command && openMenuId === menu.id" class="menu-dropdown">
-        <button
-          v-for="item in menu.items"
-          :key="item.id"
-          type="button"
-          class="menu-command"
-          :class="{ active: item.checked }"
-          :disabled="item.disabled"
-          @click.stop="$emit('command', item.id)"
-        >
-          <span class="menu-command-label">
-            {{
-              item.id === "toggleMode"
-                ? isSourceMode
-                  ? t("command.wysiwyg")
-                  : t("command.toggleMode")
-                : item.label
-            }}
-          </span>
-          <span v-if="item.shortcut" class="menu-command-shortcut">{{ item.shortcut }}</span>
-        </button>
+        <template v-for="(item, index) in menu.items" :key="item.id">
+          <div v-if="item.group && item.group !== menu.items[index - 1]?.group" class="menu-group-label">{{ item.group }}</div>
+          <button
+            type="button"
+            class="menu-command"
+            :class="{ active: item.checked }"
+            :disabled="item.disabled"
+            @click.stop="$emit('command', item.id)"
+          >
+            <span class="menu-command-label">
+              {{
+                item.id === "toggleMode"
+                  ? isSourceMode
+                    ? t("command.wysiwyg")
+                    : t("command.toggleMode")
+                  : item.label
+              }}
+            </span>
+            <span v-if="item.shortcut" class="menu-command-shortcut">{{ item.shortcut }}</span>
+          </button>
+        </template>
       </div>
     </div>
   </nav>

@@ -6,6 +6,8 @@ import "codemirror/lib/codemirror.css";
 import "codemirror/mode/markdown/markdown.js";
 import "codemirror/addon/search/searchcursor";
 import { createSourceHistoryAdapter } from "../editor/sourceHistoryAdapter";
+import { formatSource } from "../editor/sourceFormatting";
+import type { ParagraphCommand } from "../editor/paragraphCommands";
 import type { DocumentRevision, RendererLease, SourceCheckpoint, SourceHistoryAdapter } from "../editor/sessionTypes";
 
 const props = withDefaults(defineProps<{ modelValue?: string; active?: boolean; identity?: DocumentRevision; lease?: RendererLease; checkpoint?: SourceCheckpoint | null }>(), {
@@ -237,6 +239,7 @@ function clearUndoably() {
 }
 
 defineExpose({
+  format: (command: ParagraphCommand) => { if (cm && props.active && !disposed) formatSource(cm, command); },
   getValue: () => cm?.getValue() ?? "",
   setValue: (value: string) => {
     cm?.setValue(value);

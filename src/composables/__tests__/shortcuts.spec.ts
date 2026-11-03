@@ -3,6 +3,7 @@ import { cloneBindings, defaultShortcutBindings, loadBindings, normalizeShortcut
 import { createShortcutHandler } from "../../services/shortcutHandler";
 import { useShortcuts } from "../useShortcuts";
 import { readClipboardData } from "../../services/clipboard";
+import { paragraphCommands } from "../../editor/paragraphCommands";
 
 function keyboard(key: string, extra: Partial<KeyboardEvent> = {}, context: "editor" | "input" | "chrome" = "editor") {
   return {
@@ -18,6 +19,16 @@ function keyboard(key: string, extra: Partial<KeyboardEvent> = {}, context: "edi
 afterEach(() => vi.unstubAllGlobals());
 
 describe("shortcut configuration", () => {
+  it("leaves paragraph commands unbound on both platforms and accepts custom bindings", () => {
+    for (const mac of [false, true]) {
+      const defaults = defaultShortcutBindings(mac);
+      for (const { id } of paragraphCommands) expect(defaults[id]).toEqual([]);
+      const saved = loadBindings(JSON.stringify({ version: 1, bindings: { bold: ["Ctrl+B"] } }), defaults);
+      expect(resolveShortcut(keyboard("b"), saved)).toBe("bold");
+      expect(resolveShortcut(keyboard("b"), defaults)).toBeNull();
+    }
+  });
+
   it("defines common file shortcuts and distinct platform defaults", () => {
     const windows = defaultShortcutBindings(false);
     const mac = defaultShortcutBindings(true);
@@ -161,11 +172,20 @@ describe("shortcut dispatch", () => {
     expect(input.preventDefault).not.toHaveBeenCalled();
   });
 
-  it("leaves Muya formatting shortcuts available when not assigned", () => {
+  it("blocks unbound native HTML formatting and routes custom formatting through the registry", () => {
     const h = handler();
-    const event = keyboard("B");
-    h.dispatch(event);
-    expect(event.preventDefault).not.toHaveBeenCalled();
+    for (const key of ["B", "I"]) {
+      const event = keyboard(key);
+      h.dispatch(event);
+      expect(event.preventDefault).toHaveBeenCalledOnce();
+    }
+    expect(h.execute).not.toHaveBeenCalled();
+    h.bindings.bold = ["Ctrl+B"];
+    h.dispatch(keyboard("B"));
+    expect(h.execute).toHaveBeenCalledExactlyOnceWith("bold");
+    const input = keyboard("B", {}, "input");
+    h.dispatch(input);
+    expect(input.preventDefault).not.toHaveBeenCalled();
   });
 
   it("ignores composition, AltGraph, key repeats and modal settings", () => {

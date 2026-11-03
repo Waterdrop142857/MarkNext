@@ -29,5 +29,11 @@ export function createShortcutHandler(options: {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
+    // Unbound formatting must not fall through to contenteditable's native
+    // HTML formatting, which bypasses the document model and its history.
+    if (inEditor && /^(Ctrl|Meta)\+(B|I)$/.test(shortcutFromEvent(event) ?? "")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
   };
 }

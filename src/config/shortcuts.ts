@@ -1,6 +1,8 @@
 import { t, type MessageKey } from "../i18n";
+import { paragraphCommands } from "../editor/paragraphCommands";
 
 export const shortcutCommands = [
+  ...paragraphCommands,
   { id: "settings", label: "settings.title", group: "group.settings" },
   { id: "new", label: "shortcut.command.new", group: "menu.file" },
   { id: "open", label: "shortcut.command.open", group: "menu.file" },
@@ -131,7 +133,7 @@ export function loadBindings(raw: string | null, defaults: ShortcutBindings): Sh
   }
 }
 
-export const textEditingCommands = new Set<string>(["undo", "redo", "cut", "copy", "paste", "selectAll", "clear"]);
+export const textEditingCommands = new Set<string>(["undo", "redo", "cut", "copy", "paste", "selectAll", "clear", ...paragraphCommands.map(command => command.id)]);
 
 export function resolveShortcut(event: KeyboardEvent, bindings: ShortcutBindings): ShortcutCommand | null {
   const chord = shortcutFromEvent(event);

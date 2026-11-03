@@ -1,6 +1,7 @@
 import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
 import type { EditorSessionCheckpoint } from "./sessionTypes";
+import type { ParagraphCommand } from "./paragraphCommands";
 
 /** Identifies the renderer generation that originated an event. */
 export interface EditorEvent<T> {
@@ -24,6 +25,7 @@ export interface EditorLifecyclePort {
   resume(): Promise<boolean>;
 }
 export interface EditorInteractionPort {
+  format(command: ParagraphCommand): void;
   focus(): void;
   captureView(): RecoveryView;
   applyView(view: RecoveryView | null | undefined, sourceMode: boolean): void;

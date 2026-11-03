@@ -1,4 +1,5 @@
 import type { MessageKey } from "../i18n";
+import { paragraphCommands } from "../editor/paragraphCommands";
 
 export interface MenuItem {
   id: string;
@@ -6,6 +7,7 @@ export interface MenuItem {
   checked?: boolean;
   disabled?: boolean;
   shortcut?: string;
+  group?: string;
 }
 
 export interface AppMenu {
@@ -19,7 +21,7 @@ interface MenuDefinition {
   id: string;
   label: MessageKey;
   command?: string;
-  items: (Omit<MenuItem, "label"> & { label: MessageKey })[];
+  items: (Omit<MenuItem, "label" | "group"> & { label: MessageKey; group?: MessageKey })[];
 }
 
 export const appMenus: MenuDefinition[] = [
@@ -74,9 +76,7 @@ export const appMenus: MenuDefinition[] = [
   {
     id: "paragraph",
     label: "menu.paragraph",
-    items: [
-      { id: "paragraph", label: "command.paragraph", disabled: true },
-    ],
+    items: [...paragraphCommands],
   },
   {
     id: "help",

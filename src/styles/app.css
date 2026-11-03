@@ -232,6 +232,22 @@
   border-radius: var(--fluent-menu-radius, 6px);
   box-shadow: var(--fluent-menu-shadow, 0 8px 24px rgba(0, 0, 0, 0.14));
   user-select: none;
+  max-height: max(80px, calc(var(--app-viewport-height, 100dvh) - 112px));
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.menu-group-label {
+  padding: 8px 10px 4px;
+  color: var(--fluent-menu-shortcut, #888888);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.menu-group-label:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--fluent-menu-border, #e5e5e5);
 }
 
 .menu-command {

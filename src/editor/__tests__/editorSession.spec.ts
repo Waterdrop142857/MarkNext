@@ -6,6 +6,7 @@ import { Muya } from "../../muya";
 import EditorSession from "../../components/EditorSession.vue";
 import type { EditorSessionCheckpoint } from "../sessionTypes";
 import * as clipboard from "../../services/clipboard";
+import type { ParagraphCommand } from "../paragraphCommands";
 
 const cleanup: (() => void)[] = [];
 const engines: Muya[] = [];
@@ -39,6 +40,96 @@ async function mount(text = "original", checkpoint?: EditorSessionCheckpoint, op
 }
 
 describe("editor session lifecycle", () => {
+  it.each([
+    ["bold", "**original**"], ["italic", "*original*"], ["strikethrough", "~~original~~"],
+    ["insertLink", "[original]()"], ["insertImage", "![original]()"],
+  ] as const)("formats through both engine adapters with standalone history: %s", async (command, expected) => {
+    for (const sourceMode of [false, true]) {
+      const view = await mount("original");
+      if (sourceMode) await view.session.value!.toggleMode();
+      view.session.value!.selectAll();
+      view.session.value!.format(command);
+      view.session.value!.flush(); await nextTick();
+      expect(view.markdown.value.trim()).toBe(expected);
+      expect(view.session.value!.undo()).toBe(true); await nextTick();
+      expect(view.markdown.value.trim()).toBe("original");
+      expect(view.session.value!.redo()).toBe(true); await nextTick();
+      expect(view.markdown.value.trim()).toBe(expected);
+    }
+  });
+
+  it.each([1, 2, 3, 4, 5, 6] as const)("applies heading %s in both modes without losing text", async level => {
+    for (const sourceMode of [false, true]) {
+      const view = await mount("original");
+      if (sourceMode) await view.session.value!.toggleMode();
+      else view.getMuya()!.editor.scrollPage!.firstContentInDescendant()!.setCursor(0, 0, true);
+      view.session.value!.format(`heading${level}` as ParagraphCommand);
+      view.session.value!.flush(); await nextTick();
+      expect(view.markdown.value.trim()).toBe(`${"#".repeat(level)} original`);
+      view.session.value!.undo(); await nextTick();
+      expect(view.markdown.value.trim()).toBe("original");
+    }
+  });
+
+  it("inserts a table without consuming nonempty text in either mode", async () => {
+    for (const sourceMode of [false, true]) {
+      const view = await mount("original");
+      if (sourceMode) await view.session.value!.toggleMode();
+      else view.getMuya()!.editor.scrollPage!.firstContentInDescendant()!.setCursor(0, 0, true);
+      view.session.value!.format("insertTable");
+      view.session.value!.flush(); await nextTick();
+      expect(view.markdown.value).toContain("original");
+      expect(view.markdown.value).toContain("| --- | --- | --- |");
+      view.session.value!.undo(); await nextTick();
+      expect(view.markdown.value.trim()).toBe("original");
+    }
+  });
+
+  it("toggles source emphasis, excludes a trailing unselected line, and blocks formatting while suspended", async () => {
+    const view = await mount("first\nsecond\nthird");
+    await view.session.value!.toggleMode();
+    view.source().setSelection({ line: 0, ch: 0 }, { line: 2, ch: 0 });
+    view.session.value!.format("heading2"); await nextTick();
+    expect(view.markdown.value).toBe("## first\n## second\nthird");
+    view.session.value!.undo(); await nextTick();
+    view.source().setSelection({ line: 0, ch: 0 }, { line: 0, ch: 5 });
+    view.session.value!.format("bold"); view.session.value!.format("bold"); await nextTick();
+    expect(view.markdown.value.trim()).toBe("first\nsecond\nthird");
+    await view.session.value!.suspend();
+    view.session.value!.format("insertImage");
+    expect(view.markdown.value.trim()).toBe("first\nsecond\nthird");
+  });
+
+  it("combines source bold and italic without mistaking bold markers for italic", async () => {
+    const view = await mount("original");
+    await view.session.value!.toggleMode();
+    view.session.value!.selectAll();
+    view.session.value!.format("bold");
+    view.session.value!.format("italic"); await nextTick();
+    expect(view.markdown.value).toBe("***original***");
+    view.session.value!.format("italic"); await nextTick();
+    expect(view.markdown.value).toBe("**original**");
+    view.session.value!.selectAll();
+    view.session.value!.format("italic"); await nextTick();
+    expect(view.markdown.value).toBe("***original***");
+    view.session.value!.format("italic"); await nextTick();
+    expect(view.markdown.value).toBe("**original**");
+  });
+
+  it("formats multiple source paragraphs without spanning blank lines or heading markers", async () => {
+    const view = await mount("# first\n\nsecond");
+    await view.session.value!.toggleMode();
+    view.session.value!.selectAll();
+    view.session.value!.format("bold"); await nextTick();
+    expect(view.markdown.value).toBe("# **first**\n\n**second**");
+    view.session.value!.format("bold"); await nextTick();
+    expect(view.markdown.value).toBe("# first\n\nsecond");
+    view.session.value!.undo(); await nextTick();
+    expect(view.markdown.value).toBe("# **first**\n\n**second**");
+    view.session.value!.undo(); await nextTick();
+    expect(view.markdown.value).toBe("# first\n\nsecond");
+  });
+
   it("destroys and reconstructs a WYSIWYG renderer with pending edits and both history stacks", async () => {
     const { session, markdown, host, getMuya } = await mount("start");
     const editor = getMuya()!;

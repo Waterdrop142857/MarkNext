@@ -32,6 +32,7 @@ import { createCommandRegistry } from "./application/commands";
 import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
+import { createParagraphHandlers, paragraphCommandIds } from "./editor/paragraphCommands";
 
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
@@ -248,6 +249,7 @@ const menus = computed(() => appMenus.map((menu) => {
     items: menu.items.map((item) => ({
       ...item,
       label: t(item.label),
+      group: item.group ? t(item.group) : undefined,
       shortcut: commandShortcut(item.id),
       disabled: item.disabled || !commandRegistry.canExecute(item.id),
       checked: menu.id !== "theme" ? item.checked : item.id === "theme-light"
@@ -416,6 +418,7 @@ function runContextCommand(itemId: string) {
 }
 
 const commandRegistry = createCommandRegistry({
+  ...createParagraphHandlers(command => editorSessionRef.value?.format(command)),
   new: () => runTabAction("new"), open: () => runTabAction("open"),
   save: () => runTabAction("save"), saveAs: () => runTabAction("saveAs"),
   saveAll: () => runTabAction("saveAll"), close: () => runTabAction("close"),
@@ -438,6 +441,7 @@ const commandRegistry = createCommandRegistry({
   about: () => { contextMenu.value = null; aboutOpen.value = true; },
   tabClose: request => { void closeTab(request.tabId); },
 }, request => !documentTabs.busy.value
+  && (!paragraphCommandIds.has(request.id) || (!!documentTabs.activeId.value && editorAvailable.value))
   && (!!documentTabs.activeId.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
   && (request.id !== "devtools" || import.meta.env.DEV)
   && (request.id !== "tabClose" || documentTabs.tabs.value.some(tab => tab.id === request.tabId)));

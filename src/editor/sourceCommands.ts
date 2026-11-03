@@ -1,6 +1,7 @@
 import type SourceEditor from "../components/SourceEditor.vue";
 import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
+import type { ParagraphCommand } from "./paragraphCommands";
 
 type SourceView = InstanceType<typeof SourceEditor>;
 export function createSourceCommands(current: () => SourceView | null) {
@@ -14,6 +15,7 @@ export function createSourceCommands(current: () => SourceView | null) {
     editor?.setScrollTop(view?.scrollTop ?? 0);
   }
   return {
+    format: (command: ParagraphCommand) => current()?.format(command),
     focus: () => current()?.focus(), captureView, applyView,
     navigateHeading: (target: OutlineHeading) => {
       const editor = current(); if (!editor) return false;

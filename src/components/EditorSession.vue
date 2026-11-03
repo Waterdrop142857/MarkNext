@@ -14,6 +14,7 @@ import { createMuyaCommands } from "../editor/muyaCommands";
 import { createSourceCommands } from "../editor/sourceCommands";
 import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
+import type { ParagraphCommand } from "../editor/paragraphCommands";
 
 const props = defineProps<{
   modelValue: string;
@@ -241,6 +242,10 @@ async function toggleMode(): Promise<boolean> {
 const muyaCommands = createMuyaCommands(() => muya.value);
 const sourceCommands = createSourceCommands(() => sourceRef.value);
 function interactive() { return !disposed && !transitioning.value && !composing.value && !suspended.value; }
+function format(command: ParagraphCommand) {
+  if (!interactive() || !available.value || muya.value?.busy) return;
+  if (props.sourceMode) sourceCommands.format(command); else muyaCommands.format(command);
+}
 function focus() {
   if (!interactive()) return;
   if (props.sourceMode) sourceCommands.focus(); else muyaCommands.focus();
@@ -311,7 +316,7 @@ onBeforeUnmount(() => {
 
 defineExpose({
   flush, toggleMode, suspend, resume, focus, captureView, applyView, navigateHeading,
-  selectAll, clearUndoably, paste, search, closeSearch, find, replace,
+  selectAll, clearUndoably, paste, search, closeSearch, find, replace, format,
   capture: () => serialize(checkpoint, null),
   undo: () => {
     if (disposed || transitioning.value || composing.value || suspended.value) return false;

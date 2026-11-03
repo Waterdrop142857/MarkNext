@@ -2,9 +2,29 @@ import type { Muya } from "../muya";
 import type { IHistorySelection } from "../muya/selection/types";
 import type { RecoveryView } from "../document/types";
 import type { OutlineHeading } from "../services/documentAnalysis";
+import { headingLevels, isHeadingCommand, type ParagraphCommand } from "./paragraphCommands";
 
 /** Engine-specific interactions remain behind the session's lifetime guard. */
 export function createMuyaCommands(current: () => Muya | null) {
+  function format(command: ParagraphCommand) {
+    const editor = current();
+    if (!editor || editor.destroyed || editor.busy) return;
+    editor.flush();
+    editor.editor.history.breakGroup();
+    try {
+      if (isHeadingCommand(command)) {
+        const level = headingLevels[command];
+        editor.updateParagraph(level === 0 ? "paragraph" : `heading ${level}`);
+      } else if (command === "insertTable") {
+        editor.createTable({ rows: 3, columns: 3 });
+      } else {
+        const formats = { bold: "strong", italic: "em", strikethrough: "del", insertImage: "image", insertLink: "link" } as const;
+        editor.format(formats[command]);
+      }
+      editor.flush();
+      editor.focus();
+    } finally { editor.editor.history.breakGroup(); }
+  }
   function selection(): IHistorySelection | null {
     const value = current()?.getSelection();
     if (!value?.anchor || !value.focus) return null;
@@ -64,7 +84,7 @@ export function createMuyaCommands(current: () => Muya | null) {
     editor.replace(replacement, { isSingle: !all, isRegexp: false });
   }
   return {
-    focus: () => current()?.focus(), captureView, applyView, navigateHeading,
+    focus: () => current()?.focus(), format, captureView, applyView, navigateHeading,
     selectAll: () => current()?.selectAllDocument(),
     clear: (markdown: string) => { const editor = current(); if (editor && markdown) editor.replaceContent("", selection() ?? undefined); },
     paste: async (data: DataTransfer) => { await current()?.editor.clipboard.pasteHandler(new ClipboardEvent("paste", { clipboardData: data })); },
