@@ -20,15 +20,7 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri::plugin::Builder::new("linux-file-drop")
         .on_navigation(|webview, url| {
             let app = webview.app_handle();
-            let Some(paths) = file_navigation(
-                webview.label(),
-                url,
-                app.config()
-                    .bundle
-                    .file_associations
-                    .as_deref()
-                    .unwrap_or_default(),
-            ) else {
+            let Some(paths) = file_navigation(webview.label(), url) else {
                 return true;
             };
             // WebKit's default file-drop action can replace the application
@@ -60,13 +52,9 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 
 /// None permits normal app navigation; Some always blocks replacement of the
 /// app, including unsupported/foreign file URLs that must never be read.
-fn file_navigation(
-    label: &str,
-    url: &tauri::Url,
-    associations: &[tauri::utils::config::FileAssociation],
-) -> Option<Vec<String>> {
+fn file_navigation(label: &str, url: &tauri::Url) -> Option<Vec<String>> {
     (label == MAIN_WINDOW && url.scheme() == "file")
-        .then(|| window_instance::paths_from_drop_inputs(&[url.to_string()], associations))
+        .then(|| window_instance::paths_from_drop_inputs(&[url.to_string()]))
 }
 
 #[derive(Default)]
@@ -222,15 +210,7 @@ fn attach(view: &impl IsA<gtk::Widget>, app: tauri::AppHandle) {
             .iter()
             .map(|uri| uri.to_string())
             .collect::<Vec<_>>();
-        let paths = window_instance::paths_from_drop_inputs(
-            &inputs,
-            data_app
-                .config()
-                .bundle
-                .file_associations
-                .as_deref()
-                .unwrap_or_default(),
-        );
+        let paths = window_instance::paths_from_drop_inputs(&inputs);
         drag.probe.received(paths);
         let documents = matches!(drag.probe.decision, Decision::Documents(_));
         trace(if documents {
@@ -293,13 +273,7 @@ mod tests {
     use super::*;
 
     fn navigate(url: &str) -> Option<Vec<String>> {
-        let config: tauri::utils::config::Config =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        file_navigation(
-            MAIN_WINDOW,
-            &tauri::Url::parse(url).unwrap(),
-            config.bundle.file_associations.as_deref().unwrap(),
-        )
+        file_navigation(MAIN_WINDOW, &tauri::Url::parse(url).unwrap())
     }
 
     #[test]
@@ -333,11 +307,7 @@ mod tests {
             assert_eq!(navigate(url), None, "{url}");
         }
         assert_eq!(
-            file_navigation(
-                "other",
-                &tauri::Url::parse("file:///tmp/notes.md").unwrap(),
-                &[]
-            ),
+            file_navigation("other", &tauri::Url::parse("file:///tmp/notes.md").unwrap()),
             None
         );
     }

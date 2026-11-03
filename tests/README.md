@@ -89,6 +89,29 @@ MARKNEXT_WEBKIT_EXECUTABLE=/tmp/marknext-webkit-run.sh pnpm check
 
 MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、用例与断言完全相同；缺少运行库依旧失败，不会跳过 WebKit。临时文件可能被系统清理，之后需重新准备兼容环境。Release 工作流不运行浏览器测试。
 
+## Linux 原生文件拖放回归
+
+`tests/native/file_drop.py` 启动真实 Tauri 和外部 GTK 文件拖放源，通过鼠标拖动及系统剪贴板检查编辑器内容。需要 GTK 3 的 Python GI 绑定、`xdotool`、`Xvfb`、`dbus-run-session`，以及已构建的调试版二进制。测试使用独立显示屏、独立 D-Bus 会话及临时文档/设置，避免命中开发者当前的应用单实例；用例不通过 JavaScript 派发拖放或模拟 IPC。
+
+在项目根目录先准备调试版，并在单独终端保持 `pnpm dev` 运行，再执行：
+
+```bash
+cargo build --locked --manifest-path src-tauri/Cargo.toml
+Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -ac
+```
+
+保持 Xvfb 运行，在另一个终端执行：
+
+```bash
+dbus-run-session -- python3 tests/native/file_drop.py --display :96
+```
+
+测试拒绝使用调用者当前的显示屏。`:96` 已被占用时选择其他空闲编号，并同步修改参数；测试结束后退出专用 Xvfb。日志及关键截图输出到 `test-results/native-drop/`，可使用 `--artifacts` 指定目录。测试断言源端收到 COPY、悬停/取消不打开、各文档实际内容、重复激活、脏文档与撤销保留、目录及其他类型不成为文档、混合多文件打开及源文件未变。标签通过鼠标点击切换，避免把窗口系统的快捷键拦截与文件拖放混在一起。
+
+本次复现使用系统 WebKitGTK 2.54.2、GTK 3 和独立 Xvfb。旧实现能收到 URI，但因读取被 Tauri 移除的运行时文件关联列表而过滤掉所有文档；真实 `generate_context!()` 的 Rust 回归在旧实现失败、修复后通过。另以兼容 ICU 环境执行 `nativeFiles.spec.ts` 的 5 项 WebKit 浏览器回归，通过后再执行原生测试。X11 原生回归不代替实际 niri/Wayland 文件管理器和 Windows/macOS 的验收。
+
+补充原生 Wayland 验证：在 Xvfb 内运行 Weston 的嵌套 Wayland 会话，使 Tauri 使用 `GdkWaylandDisplay`、Dolphin 使用 Qt Wayland 平台。外部 GTK 源及实际 Dolphin 文件管理器均成功拖入含中文/空格/`#`/`%` 的 Markdown 文件；GTK 源收到 COPY 确认，编辑器内容通过真实 Wayland 剪贴板读回并与文件比较，源文件保留且内容不变。此轮为独立原生集成验证，记录位于 `test-results/native-wayland/`；上面的自动脚本仍只声明 X11 支持。Weston 验证不等同于用户的 niri 会话验收。
+
 ## 覆盖边界
 
 跨平台文档图标测试见 [文档图标说明](../docs/document-icons.md)：Vitest 检查类型与

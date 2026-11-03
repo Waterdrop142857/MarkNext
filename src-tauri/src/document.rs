@@ -4,6 +4,10 @@ pub(crate) mod images;
 mod io;
 mod paths;
 
+/// Application document formats, independent of installer-only metadata.
+/// Keep the installer associations aligned through the configuration contract test.
+pub(crate) const DOCUMENT_EXTENSIONS: &[&str] = &["md", "markdown", "txt"];
+
 use codec::{content_version, decode_document};
 pub(crate) use codec::{encode_document, FileEncoding, ReadDocument};
 #[cfg(test)]

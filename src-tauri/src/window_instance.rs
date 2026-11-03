@@ -184,22 +184,17 @@ pub fn paths_from_args(args: impl IntoIterator<Item = String>, cwd: &Path) -> Ve
     paths
 }
 
-/// Only completed native document drops become open requests. The configured
-/// file associations are the shared list of supported document extensions.
-pub fn paths_from_drop(
-    event: &tauri::DragDropEvent,
-    associations: &[tauri::utils::config::FileAssociation],
-) -> Vec<String> {
+/// Only completed native document drops become open requests. Tauri removes
+/// installer file associations from its generated runtime config, so they
+/// cannot be used as the application's document-format policy.
+pub fn paths_from_drop(event: &tauri::DragDropEvent) -> Vec<String> {
     let tauri::DragDropEvent::Drop { paths, .. } = event else {
         return Vec::new();
     };
-    filter_dropped_paths(paths, associations)
+    filter_dropped_paths(paths)
 }
 
-fn filter_dropped_paths(
-    paths: &[PathBuf],
-    associations: &[tauri::utils::config::FileAssociation],
-) -> Vec<String> {
+fn filter_dropped_paths(paths: &[PathBuf]) -> Vec<String> {
     paths
         .iter()
         .filter(|path| {
@@ -209,22 +204,16 @@ fn filter_dropped_paths(
                     .extension()
                     .and_then(|ext| ext.to_str())
                     .is_some_and(|ext| {
-                        associations.iter().any(|association| {
-                            association
-                                .ext
-                                .iter()
-                                .any(|supported| supported.0.eq_ignore_ascii_case(ext))
-                        })
+                        crate::document::DOCUMENT_EXTENSIONS
+                            .iter()
+                            .any(|supported| supported.eq_ignore_ascii_case(ext))
                     })
         })
         .filter_map(|path| path.to_str().map(str::to_owned))
         .collect()
 }
 
-pub(crate) fn paths_from_drop_inputs(
-    inputs: &[String],
-    associations: &[tauri::utils::config::FileAssociation],
-) -> Vec<String> {
+pub(crate) fn paths_from_drop_inputs(inputs: &[String]) -> Vec<String> {
     let paths = inputs
         .iter()
         .filter_map(|value| {
@@ -242,18 +231,11 @@ pub(crate) fn paths_from_drop_inputs(
             }
         })
         .collect::<Vec<_>>();
-    filter_dropped_paths(&paths, associations)
+    filter_dropped_paths(&paths)
 }
 
 pub fn deliver_drop(app: &tauri::AppHandle, event: &tauri::DragDropEvent) {
-    let paths = paths_from_drop(
-        event,
-        app.config()
-            .bundle
-            .file_associations
-            .as_deref()
-            .unwrap_or_default(),
-    );
+    let paths = paths_from_drop(event);
     let _ = queue_drop(app, paths);
 }
 
@@ -274,14 +256,7 @@ pub fn queue_dropped_files(
     if window.label() != MAIN_WINDOW {
         return Err("File drops require the main window".into());
     }
-    let paths = paths_from_drop_inputs(
-        &paths,
-        app.config()
-            .bundle
-            .file_associations
-            .as_deref()
-            .unwrap_or_default(),
-    );
+    let paths = paths_from_drop_inputs(&paths);
     queue_drop(&app, paths)
 }
 
@@ -556,11 +531,28 @@ mod tests {
     }
 
     #[test]
-    fn native_document_drop_uses_configured_extensions_and_preserves_paths() {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let associations: Vec<tauri::utils::config::FileAssociation> =
-            serde_json::from_value(config["bundle"]["fileAssociations"].clone()).unwrap();
+    fn document_drop_works_with_the_actual_generated_tauri_context() {
+        let context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        // This is intentionally the generated context, not tauri.conf.json:
+        // Tauri strips installer metadata while producing this runtime value.
+        assert!(context.config().bundle.file_associations.is_none());
+        let file = std::env::temp_dir().join("generated-context.MD");
+        let event = tauri::DragDropEvent::Drop {
+            paths: vec![file.clone()],
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+        };
+        assert_eq!(
+            paths_from_drop(&event),
+            vec![file.to_str().unwrap().to_owned()]
+        );
+        assert_eq!(
+            paths_from_drop_inputs(&[tauri::Url::from_file_path(&file).unwrap().to_string()]),
+            vec![file.to_str().unwrap().to_owned()]
+        );
+    }
+
+    #[test]
+    fn native_document_drop_uses_supported_formats_and_preserves_paths() {
         let cwd = std::env::temp_dir();
         let documents = ["文档 # 1.MD", "second.MarkDown", "third.TXT"].map(|name| cwd.join(name));
         let event = tauri::DragDropEvent::Drop {
@@ -576,7 +568,7 @@ mod tests {
                 .collect(),
             position: tauri::PhysicalPosition::new(10.0, 20.0),
         };
-        let paths = paths_from_drop(&event, &associations);
+        let paths = paths_from_drop(&event);
         assert_eq!(
             paths,
             documents.map(|path| path.to_str().unwrap().to_owned())
@@ -590,11 +582,6 @@ mod tests {
 
     #[test]
     fn native_hover_cancel_and_unsupported_drops_do_not_open_documents() {
-        let associations: Vec<tauri::utils::config::FileAssociation> =
-            serde_json::from_value(serde_json::json!([
-                { "ext": ["md", "markdown", "txt"] }
-            ]))
-            .unwrap();
         let position = tauri::PhysicalPosition::new(0.0, 0.0);
         let paths = vec![std::env::temp_dir().join("hover.md")];
         for event in [
@@ -610,7 +597,7 @@ mod tests {
                 position,
             },
         ] {
-            assert!(paths_from_drop(&event, &associations).is_empty());
+            assert!(paths_from_drop(&event).is_empty());
         }
     }
 
@@ -625,38 +612,28 @@ mod tests {
                 .as_nanos()
         ));
         std::fs::create_dir(&directory).unwrap();
-        let associations: Vec<tauri::utils::config::FileAssociation> =
-            serde_json::from_value(serde_json::json!([{ "ext": ["md"] }])).unwrap();
-        let result = paths_from_drop(
-            &tauri::DragDropEvent::Drop {
-                paths: vec![directory.clone()],
-                position: tauri::PhysicalPosition::new(0.0, 0.0),
-            },
-            &associations,
-        );
+        let result = paths_from_drop(&tauri::DragDropEvent::Drop {
+            paths: vec![directory.clone()],
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+        });
         std::fs::remove_dir(directory).unwrap();
         assert!(result.is_empty());
     }
 
     #[test]
     fn dom_drop_uris_preserve_encoded_names_and_reject_urls_and_relative_names() {
-        let associations: Vec<tauri::utils::config::FileAssociation> =
-            serde_json::from_value(serde_json::json!([{ "ext": ["md", "txt"] }])).unwrap();
         let file = std::env::temp_dir().join("文档 # 100%.MD");
         let uri = tauri::Url::from_file_path(&file).unwrap().to_string();
-        let paths = paths_from_drop_inputs(
-            &[
-                uri.clone(),
-                "https://example.com/file.md".into(),
-                "relative.md".into(),
-                format!("{uri}#fragment"),
-                format!("{uri}?query"),
-                tauri::Url::from_file_path(std::env::temp_dir().join("image.png"))
-                    .unwrap()
-                    .to_string(),
-            ],
-            &associations,
-        );
+        let paths = paths_from_drop_inputs(&[
+            uri.clone(),
+            "https://example.com/file.md".into(),
+            "relative.md".into(),
+            format!("{uri}#fragment"),
+            format!("{uri}?query"),
+            tauri::Url::from_file_path(std::env::temp_dir().join("image.png"))
+                .unwrap()
+                .to_string(),
+        ]);
         assert_eq!(paths, vec![file.to_str().unwrap().to_owned()]);
     }
 
@@ -684,6 +661,18 @@ mod tests {
         assert_eq!(windows[0]["dragDropEnabled"], true);
         assert_eq!(windows[0]["backgroundColor"], "#1e1e1e");
         let associations = config["bundle"]["fileAssociations"].as_array().unwrap();
+        let declared: std::collections::BTreeSet<_> = associations
+            .iter()
+            .flat_map(|item| item["ext"].as_array().unwrap())
+            .map(|extension| extension.as_str().unwrap())
+            .collect();
+        assert_eq!(
+            declared,
+            crate::document::DOCUMENT_EXTENSIONS
+                .iter()
+                .copied()
+                .collect()
+        );
         assert!(associations
             .iter()
             .any(|item| item["mimeType"] == "text/markdown"));
