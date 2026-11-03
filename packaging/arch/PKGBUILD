@@ -1,0 +1,46 @@
+# Repackage the upstream DEB; no application compilation is performed.
+pkgname=marknext-bin
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='WYSIWYG Markdown editor built with Tauri and Muya (upstream binary)'
+arch=('x86_64')
+url='https://github.com/Waterdrop142857/MarkNext'
+license=('MIT')
+depends=(
+  'cairo'
+  'dbus'
+  'gcc-libs'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libsoup3'
+  'webkit2gtk-4.1'
+  'xdg-utils'
+)
+provides=("marknext=${pkgver}")
+conflicts=('marknext' 'marknext-git')
+options=('!strip' '!debug')
+
+_deb="marknext-${pkgver}-amd64.deb"
+_license="marknext-${pkgver}.LICENSE"
+source=(
+  "${_deb}::${url}/releases/download/v${pkgver}/x86_64-unknown-linux-gnu-MarkNext_${pkgver}_amd64.deb"
+  "${_license}::https://raw.githubusercontent.com/Waterdrop142857/MarkNext/v${pkgver}/LICENSE"
+)
+noextract=("${_deb}")
+sha256sums=(
+  '5b69ffa829a29e0e992c3e6ef61f8d862e9d173b3627c10b02ad7e60029d15da'
+  '9cad0178cd53bdd6b2e56d778a5fc5eadac45fd2ce7487bcf0bfadcfb7db3596'
+)
+
+prepare() {
+  bsdtar -xf "${srcdir}/${_deb}" -C "${srcdir}" data.tar.gz
+}
+
+package() {
+  # Install the payload only, never Debian control files or maintainer scripts.
+  bsdtar --no-same-owner -xf "${srcdir}/data.tar.gz" -C "${pkgdir}"
+  install -Dm644 "${srcdir}/${_license}" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
