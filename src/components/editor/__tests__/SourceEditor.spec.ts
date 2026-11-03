@@ -18,6 +18,60 @@ async function mount(text = "foo bar foo") {
   return { value, active, generation, source, editor };
 }
 describe("source search and history", () => {
+  it("styles selected syntax without modifying text, history or clipboard data", async () => {
+    const { editor } = await mount("# heading\n\nbody");
+    const cm = editor(), before = cm.historySize();
+    cm.setSelection({ line: 0, ch: 2 }, { line: 0, ch: 9 });
+    expect(cm.getWrapperElement().querySelector(".CodeMirror-selectedtext")?.textContent).toBe("heading");
+    expect(cm.getSelection()).toBe("heading");
+    expect(cm.getValue()).toBe("# heading\n\nbody");
+    expect(cm.historySize()).toEqual(before);
+    cm.setCursor(2, 0);
+    expect(cm.getWrapperElement().querySelector(".CodeMirror-selectedtext")).toBeNull();
+    expect(cm.historySize()).toEqual(before);
+  });
+
+  it("uses an attached, decoded drag image and cleans it after the drag snapshot", async () => {
+    const { editor } = await mount();
+    const cm = editor();
+    cm.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 3 });
+    const before = cm.historySize();
+    const images: Element[] = [];
+    const setData = vi.fn();
+    const transfer = { setData, setDragImage: vi.fn((image: Element) => {
+      images.push(image);
+      if (image.tagName === "CANVAS") {
+        expect(image.isConnected).toBe(true);
+        expect((image as HTMLCanvasElement).width).toBe(1);
+        expect((image as HTMLCanvasElement).height).toBe(1);
+      }
+    }) };
+    const event = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    cm.getScrollerElement().dispatchEvent(event);
+    expect(images[images.length - 1]?.tagName).toBe("CANVAS");
+    expect(event.defaultPrevented).toBe(false);
+    expect(cm.getValue()).toBe("foo bar foo");
+    expect(cm.historySize()).toEqual(before);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.querySelector(".source-drag-image")).toBeNull();
+  });
+
+  it("removes pending drag images and listeners when the renderer is destroyed", async () => {
+    const { editor, source } = await mount();
+    const cm = editor(); cm.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 3 });
+    const event = new Event("dragstart", { bubbles: true, cancelable: true });
+    const transfer = { setData: vi.fn(), setDragImage: vi.fn() };
+    Object.defineProperty(event, "dataTransfer", { value: transfer });
+    cm.getScrollerElement().dispatchEvent(event);
+    expect(document.querySelector(".source-drag-image")).not.toBeNull();
+    source.value!.getHistoryAdapter()!.destroy();
+    expect(document.querySelector(".source-drag-image")).toBeNull();
+    transfer.setDragImage.mockClear();
+    cm.getWrapperElement().dispatchEvent(event);
+    expect(transfer.setDragImage).not.toHaveBeenCalled();
+  });
+
   it("does not replace unrelated selection", async () => {
     const { source, editor } = await mount(); editor().setSelection({ line: 0, ch: 4 }, { line: 0, ch: 7 });
     expect(source.value!.replaceCurrent("foo", "X")).toBe(false); expect(source.value!.getValue()).toBe("foo bar foo");

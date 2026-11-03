@@ -1,9 +1,38 @@
 /* SourceEditor / CodeMirror (extracted from components/SourceEditor.vue) */
 
 .source-editor {
+  --source-selection-bg: #cce8ff;
+  --source-selection-fg: #1f1f1f;
   width: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.source-editor .CodeMirror .CodeMirror-selected {
+  background: var(--source-selection-bg);
+}
+
+/* Selected syntax tokens must remain legible regardless of token specificity. */
+.source-editor .CodeMirror-selectedtext,
+.source-editor .CodeMirror-selectedtext * {
+  color: var(--source-selection-fg) !important;
+}
+
+.source-editor .CodeMirror-line::selection,
+.source-editor .CodeMirror-line *::selection {
+  background: var(--source-selection-bg);
+  color: var(--source-selection-fg);
+}
+
+.source-editor .CodeMirror-line::-moz-selection,
+.source-editor .CodeMirror-line *::-moz-selection {
+  background: var(--source-selection-bg);
+  color: var(--source-selection-fg);
+}
+
+:root[data-theme="dark"] .source-editor {
+  --source-selection-bg: #264f78;
+  --source-selection-fg: #ffffff;
 }
 
 .source-editor .CodeMirror {

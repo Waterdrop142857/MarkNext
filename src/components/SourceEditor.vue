@@ -5,8 +5,10 @@ import CodeMirror from "codemirror";
 import "codemirror/lib/codemirror.css";
 import "codemirror/mode/markdown/markdown.js";
 import "codemirror/addon/search/searchcursor";
+import "codemirror/addon/selection/mark-selection";
 import { createSourceHistoryAdapter } from "../editor/sourceHistoryAdapter";
 import { formatSource } from "../editor/sourceFormatting";
+import { attachSourceDragPreview } from "../editor/sourceDragPreview";
 import type { ParagraphCommand } from "../editor/paragraphCommands";
 import type { DocumentRevision, RendererLease, SourceCheckpoint, SourceHistoryAdapter } from "../editor/sessionTypes";
 
@@ -29,6 +31,7 @@ let searchValue = "";
 let searchMarks: CodeMirror.TextMarker[] = [];
 let history: SourceHistoryAdapter | null = null;
 let disposed = false;
+let detachDragPreview: (() => void) | null = null;
 let pendingScroll = props.checkpoint?.scroll ?? null;
 const standalone = { documentId: "standalone", revision: 0 };
 
@@ -49,8 +52,10 @@ onMounted(() => {
     theme: "default",
     viewportMargin: 10,
     readOnly: !props.active,
+    styleSelectedText: true,
     screenReaderLabel: t("command.toggleMode"),
   });
+  detachDragPreview = attachSourceDragPreview(cm);
 
   // One model/highlight update per CodeMirror operation (including replace-all).
   cm.on("changes", () => {
@@ -113,9 +118,12 @@ function restoreScroll() {
 
 function cleanup() {
   disposed = true;
+  detachDragPreview?.();
+  detachDragPreview = null;
   window.removeEventListener("resize", refreshLayout);
   searchMarks.forEach(mark => mark.clear());
   searchMarks = [];
+  cm?.setOption("styleSelectedText", false);
   cm?.getInputField().blur();
   cm?.setOption("readOnly", "nocursor");
   cm?.getWrapperElement().remove();
