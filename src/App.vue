@@ -10,6 +10,7 @@ import DocumentOutline from "./components/DocumentOutline.vue";
 import FluentContextMenu from "./components/FluentContextMenu.vue";
 import SettingsDialog from "./components/SettingsDialog.vue";
 import RecoveryDialog from "./components/RecoveryDialog.vue";
+import AboutDialog from "./components/AboutDialog.vue";
 import { fontStack, type Preferences, type SettingsCategory } from "./config/preferences";
 import { cloneBindings, resolveShortcut, type ShortcutBindings } from "./config/shortcuts";
 import { usePreferences } from "./composables/usePreferences";
@@ -94,6 +95,7 @@ const { themeMode, setThemeMode } = useTheme();
 const { bindings: shortcutBindings, defaults: defaultBindings, label: commandShortcut } = useShortcuts();
 const settingsOpen = ref(false);
 const recoveryOpen = ref(false);
+const aboutOpen = ref(false);
 const recoveryBusy = ref(false);
 const { externalChange, recoveredCopy } = workspace;
 const settingsCategory = ref<SettingsCategory>("appearance");
@@ -433,7 +435,7 @@ const commandRegistry = createCommandRegistry({
   devtools: () => {
     void invoke("open_devtools").catch(error => console.error("Failed to open devtools:", error));
   },
-  about: () => console.log("MarkNext - WYSIWYG Markdown editor built with Tauri 2 + Vue 3"),
+  about: () => { contextMenu.value = null; aboutOpen.value = true; },
   tabClose: request => { void closeTab(request.tabId); },
 }, request => !documentTabs.busy.value
   && (!!documentTabs.activeId.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
@@ -443,7 +445,7 @@ const commandRegistry = createCommandRegistry({
 const handleShortcut = createShortcutHandler({
   bindings: () => shortcutBindings.value,
   defaults: defaultBindings,
-  blocked: () => settingsOpen.value || recoveryOpen.value,
+  blocked: () => settingsOpen.value || recoveryOpen.value || aboutOpen.value,
   execute: runMenuCommand,
 });
 function handleGlobalKeydown(event: KeyboardEvent) {
@@ -627,5 +629,6 @@ onBeforeUnmount(() => {
       @discard="discardRecovery"
       @close="recoveryOpen = false"
     />
+    <AboutDialog v-if="aboutOpen" @close="aboutOpen = false" />
   </div>
 </template>

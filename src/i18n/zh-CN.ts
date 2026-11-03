@@ -100,6 +100,8 @@ export const zhCN = {
   "command.paragraph": "段落（开发中）",
   "command.devtools": "打开开发者工具",
   "command.about": "关于 MarkNext",
+  "about.description": "一个轻量级的极简主义Markdown编辑器",
+  "about.version": "版本 {version}",
   "document.untitled": "未命名",
   "document.none": "未打开文件",
   "document.empty": "打开一个 Markdown 文件开始编辑",

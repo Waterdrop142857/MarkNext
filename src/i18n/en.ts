@@ -98,6 +98,8 @@ export const en = {
   "command.paragraph": "Paragraph (Coming Soon)",
   "command.devtools": "Open Developer Tools",
   "command.about": "About MarkNext",
+  "about.description": "A lightweight, minimalist Markdown editor",
+  "about.version": "Version {version}",
   "document.untitled": "Untitled",
   "document.none": "No File Open",
   "document.empty": "Open a Markdown file to start editing",
