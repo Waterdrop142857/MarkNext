@@ -1,156 +1,70 @@
-# MarkNext
+<p align="center">
+  <img src="public/icons/marknext.svg" width="112" height="112" alt="MarkNext 软件图标" />
+</p>
 
-###### **此项目由AI辅助开发**
+<h1 align="center">MarkNext</h1>
 
-MarkNext 是一个基于 **Tauri 2 + Vue 3 + TypeScript** 的 WYSIWYG Markdown 编辑器。编辑/渲染核心来自 MarkText 的 Muya / Muyajs，已 vendor 到 `src/muya`，便于深度定制。
+<p align="center">一个轻量级的极简主义Markdown编辑器</p>
 
-> 当前状态：持续开发中。支持多文件标签页、独立编辑历史、文档大纲、字数统计和单窗口文件打开；尚未实现打印及更多格式导出。
+> [!IMPORTANT]
+> **AIGC 说明**
+>
+> 本项目使用生成式 AI 辅助开发（AIGC），包括代码与文档的编写和修改。
 
 ## 功能
 
-- WYSIWYG 所见即所得 Markdown 编辑
-- 源码模式（CodeMirror 5，Markdown 高亮 + 任务列表）
-- 无边框窗口 + 自绘标题栏（Windows Fluent UI 风格）
-- 多文件新建 / 多选打开 / 保存 / 另存为 / 全部保存 / 关闭，后台会话保留历史并销毁渲染器
-- 单窗口与文件管理器“打开方式”集成（Markdown / 纯文本），重复打开激活已有标签
-- 支持将一个或多个 `.md`、`.markdown`、`.txt` 文件拖入窗口，以独立标签打开并保留原有未保存编辑
-- 字数/字符数统计与 H1–H6 文档大纲
-- 外部修改保护：定期检查和窗口重新获得焦点时检测磁盘变化；保存使用内容版本校验，冲突时保留编辑并提供重新加载、另存为和确认覆盖
-- 未保存文档恢复：独立记录草稿，重启后通过“文件 → 恢复未保存文档”查看；原文件已改变时恢复为未保存副本
-- `Ctrl+A` 首次即全选整篇文档
-- 分类设置浮窗（点击菜单栏“设置”），包含语言、字体、字号、编码和全局缩放；可配置快捷键，支持多个键位、冲突检测、解除绑定和恢复默认，设置会在重启后保留
-- 中英文界面（设置 → 外观 → 界面语言），首次启动匹配系统语言，选择会在重启后保留；切换时保留文档、选区与撤销历史
-- WebKitGTK / WKWebView 下自定义选区绘制，阴影贴合文字
+### 专注编辑
 
-## 技术栈
+- 所见即所得编辑与 Markdown 源码模式自由切换。
+- 标题、粗体、斜体、删除线、表格、图片和超链接，按类别收纳在段落菜单中。
+- 代码块语法高亮、任务列表、LaTeX 公式及 Mermaid 图表。
+- 撤销、重做、查找与替换，支持整篇文档全选。
 
-- [Tauri 2](https://tauri.app/)
-- [Vue 3](https://vuejs.org/) + TypeScript + [Vite](https://vitejs.dev/)
-- Muya / Muyajs（vendored，位于 `src/muya`）
-- CodeMirror 5
-- pnpm workspace
+### 多文件与导航
 
-## 开发
+- 多标签页编辑，每份文档独立保留编辑历史、编辑模式和滚动位置。
+- 多选打开、全部保存、关闭所有文件，重复打开同一文件时激活已有标签。
+- 从文件管理器打开文档，或将一个及多个 `.md`、`.markdown`、`.txt` 文件拖入窗口。
+- H1–H6 文档大纲，点击标题跳转到对应段落。
+- 底部状态栏可切换字数与字符数统计。
 
-### 环境要求
+### 文件保护
 
-- Node.js ≥ 24
-- pnpm 11.28.3（由 packageManager 固定）
-- Rust stable
-- Tauri 2 系统依赖（Linux 需要 WebKitGTK 等；Windows/macOS 按 Tauri 文档准备）
+- 关闭未保存文档时询问保存、丢弃或取消。
+- 检测磁盘上的外部修改，提供保留编辑器内容或重新加载磁盘内容的选择。
+- 保存时校验文件版本，处理外部修改冲突。
+- 自动备份未保存草稿，重启后可在“文件 → 恢复未保存文档”中找回。
 
-### 安装
+### 界面与个性化
 
-```bash
-pnpm install
-```
+- 简体中文与英文界面，支持亮色、暗色及跟随系统主题。
+- 简洁的自绘标题栏、分类菜单与浮动设置窗口。
+- 可设置编辑器字体、字号、代码字体及全局缩放比例。
+- 可选择 UTF-8、UTF-8 BOM、UTF-16 LE/BE 默认文件编码。
+- 可自定义快捷键，支持多组键位、冲突检测和恢复默认。
 
-### 运行
+## 下载与使用
 
-```bash
-pnpm tauri dev
-```
+在 [GitHub Releases](https://github.com/Waterdrop142857/MarkNext/releases) 下载对应平台的安装包。
 
-### 构建
+| 平台 | 安装包 |
+| --- | --- |
+| Linux x64 | DEB、AppImage |
+| Windows x64 | NSIS EXE、MSI |
+| macOS Apple Silicon / Intel | DMG |
 
-```bash
-pnpm build
-pnpm tauri build
-```
+常用默认快捷键包括新建 `Ctrl+N`、打开 `Ctrl+O`、保存 `Ctrl+S`、查找 `Ctrl+F` 和切换源码模式 `Ctrl+Shift+M`。macOS 使用 `Cmd` 替代 `Ctrl`。
 
-### 从 main 构建 Artifacts
+统计口径、文档大纲、快捷键、设置、文件保护与恢复的详细说明见 [使用指南](docs/usage.md)。Arch Linux 用户可参考 [Arch 打包指南](packaging/arch/README.md)。
 
-在 GitHub 仓库的 **Actions → Build main artifacts → Run workflow** 手动启动构建，无需创建版本标签。工作流读取远端 `main` 的最新提交并固定其 SHA，四个平台构建同一份代码。
+## 开发文档
 
-进入该次运行的 **Artifacts**，即可下载 Linux x64、Windows x64、macOS Apple Silicon / Intel 安装包。Artifacts 名称形如 `main-<提交前12位>-<目标平台>`，保留 14 天；某个平台失败时，其他成功平台的产物仍可下载。该工作流不创建标签或 GitHub Release，也不会随普通提交自动运行。
-
-main 构建与 Release 共用 [安装包构建工作流](./.github/workflows/build-installers.yml)，使用 Node.js 24 LTS、冻结的 pnpm/Cargo 锁文件，以及相同的平台依赖和签名配置。新工作流需先推送到默认分支，才会出现在 Actions 的手动运行入口。
-
-### GitHub Release 自动发布
-
-[`Build and publish release`](./.github/workflows/release.yml) 在推送 `v*` 标签时自动构建并发布；也可在 Actions 中手动运行，填写已存在的版本标签。手动输入 `0.2.0` 会自动规范为 `v0.2.0`，但不会自动创建标签。普通提交和 Pull Request 不再自动运行质量检查，可按需在本地执行 `pnpm check`。
-
-发布前将 `package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 中 MarkNext 自身的版本同步，并提交。例如当前版本为 `0.2.0`：
-
-```bash
-git tag -a v0.2.0 -m "MarkNext v0.2.0"
-git push origin v0.2.0
-```
-
-标签必须先创建并推送到远端，且与应用版本完全一致。运行界面选择 `main` 不等于创建版本标签；缺少标签时工作流会在 checkout 前给出明确错误。`v0.2.0-beta.1` 等带预发布后缀的标签会创建 Prerelease；稳定版本发布后标记为 Latest。
-
-构建环境固定为 Node.js 24 LTS，先安装 Node.js 再安装 pnpm，并在构建前检查实际版本。JavaScript Actions 自身也使用 Node.js 24 运行时；修改工作流后，应先推送修复提交再发起新运行，直接重跑旧运行仍会使用旧版工作流。
-
-工作流分别生成 Linux x64 的 `.deb` / `.AppImage`、Windows x64 的 NSIS `.exe` / `.msi`，以及 macOS Apple Silicon / Intel 的 `.dmg`。所有平台成功后才上传完整安装包、生成 `SHA256SUMS.txt` 并公开 Release。构建失败不会发布；上传失败会留下草稿，可用同一标签重跑。已公开的 Release 不会被重跑覆盖。
-
-发布使用内置 `GITHUB_TOKEN` 的 `contents: write` 权限，无需额外 PAT。当前 Windows 安装包未配置代码签名；macOS 使用 ad-hoc 签名，未做 Apple 公证，下载后系统可能要求确认。签名与公证方式可参阅 [Tauri 官方说明](https://v2.tauri.app/distribute/sign/macos/)。
-
-### 字数统计与文档大纲
-
-底部状态栏点击即可在字数和字符数之间切换（也支持键盘 Enter/空格）。字数不含标点和空格；字符数包含标点和空格，不含换行。汉字逐字计数，其他语言的字母/数字词组按词计数；Markdown 格式标记和链接目标不计入，代码及公式内容计入。两种编辑模式使用同一统计口径，输入时合并更新。
-
-点击状态栏左侧“大纲”可展开或收起侧边栏，按 H1–H6 层级缩进展示当前文档标题，支持 `#` 标题和 Setext 下划线标题。代码、公式、HTML 及文档元数据中的伪标题不会进入大纲；引用和列表内部标题暂不纳入文档级大纲。点击条目可在所见即所得或源码模式下跳转，重复标题分别定位。大纲内可用上下方向键、Home/End 切换焦点，Enter 跳转；侧边栏独立滚动，开关不会重建编辑器或清空撤销历史。
-
-### 快捷键
-
-多文件标签页支持独立编辑模式、撤销历史、选区和滚动位置；后台标签销毁编辑器，仅保存文档与历史检查点。新建和打开增加标签，关闭时统一询问未保存修改。打开同一规范路径会切换已有标签。桌面应用保持单窗口，从文件管理器再次打开文件会聚焦已有窗口并增加/激活标签；文件关联需安装新构建的安装包。详细行为与验收见 [多文件与桌面集成](docs/multi-file.md)。
-
-Windows NSIS 安装器可勾选“添加到打开方式”，支持 `.md`、`.markdown`、`.txt`，升级保留选择。该选项保留当前默认程序；之后在 Windows 中将 MarkNext 设为 Markdown 默认程序时，文件使用独立文件图标。详见 [NSIS 安装与关联说明](src-tauri/windows/README.md)。macOS 为文档类型配置独立 ICNS；Linux 提供尊重用户图标包的 Markdown 回退图标，详见 [跨平台文档图标](docs/document-icons.md)。
-
-默认键位：新建 `Ctrl+N`、打开 `Ctrl+O`、保存 `Ctrl+S`、另存为 `Ctrl+Shift+S`、关闭文件 `Ctrl+W`、退出 `Ctrl+Q`。
-撤销 `Ctrl+Z`，重做 `Ctrl+Y` 或 `Ctrl+Shift+Z`，查找 `Ctrl+F`，替换 `Ctrl+H`，下一个/上一个匹配 `F3` / `Shift+F3`，切换源码模式 `Ctrl+Shift+M`。
-macOS 使用 `Cmd` 替代 `Ctrl`，重做为 `Cmd+Shift+Z`。
-
-切换下一/上一标签：`Ctrl+Tab` / `Ctrl+Shift+Tab`；全部保存：`Ctrl+Alt+S`（macOS 为 `Cmd+Alt+S`）。文件菜单提供“全部保存”和“关闭所有文件”；这些命令与标签切换都可在设置中自定义键位。
-
-点击菜单栏的“设置”或按 `Ctrl+,`（macOS 为 `Cmd+,`）打开统一设置窗口，在左侧选择“快捷键”管理键位。点击“添加”后按组合键，用键位旁的 `×` 解除绑定，点击“应用”保存；“取消”放弃本次修改。占用其他命令的键位时会提示冲突，需要先解除原绑定。
-搜索输入框保留系统文字编辑键位。格式快捷键等 Muya 自带键位继续由编辑器处理；如果为应用命令分配了相同键位，应用命令优先。
-
-设置窗口保留 Fluent 浮动样式，以左侧分类导航组织内容。外观包含语言与 75%–200% 缩放；编辑器包含正文字体、12–40 px 字号和代码字体，可填写已安装的自定义字体；文件包含 UTF-8、UTF-8 BOM、UTF-16 LE/BE 默认编码。默认编码用于新文档和无 BOM 文件的读取，已打开文件保存时保留识别到的编码和 BOM。修改统一点击“应用”，取消不影响现有配置；旧语言和快捷键偏好自动继承。
-
-桌面窗口的最小尺寸为 800×600（逻辑像素）。UI 控件采用系统字体和共享的固定高度，切换中英文时保持高度一致；设置页面与 Muya 正文均为滚动条预留独立空间。
-
-测试按改动范围选择，`pnpm check` 提供按需执行的完整自动化检查。用户报错须先在独立会话中运行完整 Tauri 程序复现，再定位修复，并在相同原生场景回归验收。环境准备、隔离要求和记录方式见 [测试流程](./tests/README.md)。
-
-正式版隐藏开发者工具入口；该原生命令只在 debug 构建中启用。
-
-### 文件保护与恢复
-
-当前文件每 5 秒及窗口重新获得焦点时检查磁盘状态；元数据不变时不读取全文，仅在疑似变化时计算内容版本。检测到外部修改后，无论当前文档是否有未保存修改，都先询问“保留编辑器内容”还是“重新加载磁盘内容”。保留或关闭对话框不会改写任一方，同一外部版本不重复弹窗；加载时保持编辑模式，并保护询问或读取期间的新编辑。普通保存会校验打开/上次保存时的磁盘版本；“保存我的版本”需要确认，且只批准当时检测到的外部版本，后续再有变化仍会停止保存。磁盘文件被删除或移动时不会通过普通保存自动重建，可另存为或确认保存自己的版本。
-
-未保存内容在停止输入约 750 毫秒后备份，持续输入时最长约 5 秒刷新一次；切出窗口时也会刷新。恢复文件位于 Tauri 应用数据目录的 `recovery-v1` 子目录，与 Markdown 原文件分开存放。恢复保留内容、编码、编辑模式，并尽量还原选区和滚动位置；恢复后的撤销历史从新会话开始。原文件版本已改变、被删除或无法访问时，以未保存副本恢复。正常保存、关闭或明确选择不保存会清理当前记录；尚未查看的其他恢复记录不会因退出而删除。损坏记录保留在磁盘并显示提示，备份失败会提供重试入口。
-
-源码编辑器只渲染当前视窗及相邻行，避免大文件创建全部行的 DOM；首次打开的 WYSIWYG 仍会构建完整文档。
-
-启动时提前应用主题，原生窗口在应用外壳布局就绪后显示，避免冷启动闪白。欢迎页不加载编辑器主体，首次新建/打开文件时再载入；启动错误提供重新加载入口及原生超时退路。详见 [启动显示与编辑器加载](docs/startup.md)。
-
-突然终止进程可能丢失尚未到达备份周期的最后几秒输入。独立备份不会自动修改原文件，也不代替手动保存。
-
-## 目录结构
-
-```text
-MarkNext/
-├── src/                 # 前端源码
-│   ├── components/      # MuyaEditor / SourceEditor 等组件
-│   └── muya/            # vendored Muya WYSIWYG 核心
-├── src-tauri/           # Tauri / Rust 壳
-├── ARCHITECTURE.md      # 架构与路线图
-├── package.json
-└── vite.config.ts
-```
-
-## 路线图
-
-按重要性排序，详见 [ARCHITECTURE.md](./ARCHITECTURE.md)：
-
-1. 完整的编辑功能（撤销、重做、查找替换等）
-2. i18n 国际化
-3. 自定义主题
-4. 多标签页性能与工作区恢复扩展（基础多文件已实现）
-5. 侧边栏目录扩展（文档大纲已实现）
-6. 通过可选 pandoc 导出其他格式
-7. 打印
+- [开发环境、源码编译与 GitHub Actions 发布](docs/development.md)
+- [测试流程与报错复现](tests/README.md)
+- [架构与开发方向](ARCHITECTURE.md)
+- [多文件与桌面集成](docs/multi-file.md)
+- [跨平台文档图标](docs/document-icons.md)
 
 ## License
 
-[MIT](./LICENSE)。本项目包含来自 MarkText / Muya 的代码，按上游 MIT 许可保留相应版权声明。
+[MIT](LICENSE)。本项目包含来自 MarkText / Muya 的代码，按上游 MIT 许可保留相应版权声明。

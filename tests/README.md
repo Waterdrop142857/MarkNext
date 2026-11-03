@@ -154,7 +154,7 @@ pnpm exec playwright install --with-deps chromium
 
 代码质量检查工作流已移除，push/pull_request 不再自动执行上述检查。所有本地测试和 `pnpm check` 命令仍然保留，可按需运行。
 
-仓库保留 [Release 工作流](../.github/workflows/release.yml)，仅由版本标签或手动操作触发，负责多平台安装包构建与发布，不运行完整质量检查流程。发布方法见 [README](../README.md#github-release-自动发布)。
+仓库保留 [Release 工作流](../.github/workflows/release.yml)，仅由版本标签或手动操作触发，负责多平台安装包构建与发布，不运行完整质量检查流程。发布方法见 [开发与发布说明](../docs/development.md#github-release-自动发布)。
 
 [Build main artifacts](../.github/workflows/build-main.yml) 可手动构建远端 `main` 的最新代码，将各平台安装包保留在当次运行的 Artifacts 中 14 天，不创建 Release。它与 Release 工作流共用 [安装包构建流程](../.github/workflows/build-installers.yml)，均固定源提交并使用 Node.js 24 LTS。
 
