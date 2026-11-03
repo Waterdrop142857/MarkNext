@@ -1,5 +1,8 @@
 # Windows NSIS integration
 
+Windows 安装包统一使用 NSIS EXE。`tauri.windows.conf.json` 将本地 Windows
+构建目标设为 `nsis`，main Artifacts 和 Release 使用同一构建目标。
+
 NSIS 安装器在安装目录、快捷方式页面之后提供中/英文的“添加到打开方式”复选框，
 支持 `.md`、`.markdown`、`.txt`。新安装默认不勾选，升级保留已保存的选择；
 取消勾选会移除之前注册的 MarkNext 打开方式。
@@ -16,7 +19,7 @@ NSIS 安装器在安装目录、快捷方式页面之后提供中/英文的“�
 命令和图标路径均加引号以支持含空格的安装路径。
 卸载移除本程序的 ProgID、候选项、Capabilities 和文件图标，不删除其他候选项。
 旧版 Tauri 的通用关联只在打开命令仍指向本安装目录时清理；扩展名仍指向旧关联时，
-才恢复其备份默认值。MSI 继续使用原有 Tauri 默认关联；Linux/macOS 的独立文档
+才恢复其备份默认值。Linux/macOS 的独立文档
 图标见 [跨平台说明](../../docs/document-icons.md)。
 
 `installer.nsi` 基于已锁定的 **Tauri CLI v2.11.4** 官方模板：

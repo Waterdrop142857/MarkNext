@@ -33,7 +33,7 @@ jobs:
             bundles: deb,appimage
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            bundles: nsis,msi
+            bundles: nsis
           - os: macos-15
             target: aarch64-apple-darwin
             bundles: dmg
@@ -100,7 +100,7 @@ jobs:
           import { readdirSync, mkdirSync, copyFileSync, constants } from 'node:fs';
           import { join } from 'node:path';
           const target = process.env.RELEASE_TARGET;
-          const extensions = { deb: '.deb', appimage: '.AppImage', nsis: '.exe', msi: '.msi', dmg: '.dmg' };
+          const extensions = { deb: '.deb', appimage: '.AppImage', nsis: '.exe', dmg: '.dmg' };
           mkdirSync('release-assets', { recursive: true });
           for (const bundle of process.env.RELEASE_BUNDLES.split(',')) {
             const directory = join('src-tauri', 'target', target, 'release', 'bundle', bundle);

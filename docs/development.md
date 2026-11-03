@@ -70,7 +70,7 @@ git push origin v0.2.0
 
 构建环境固定为 Node.js 24 LTS，先安装 Node.js 再安装 pnpm，并在构建前检查实际版本。JavaScript Actions 自身也使用 Node.js 24 运行时；修改工作流后，应先推送修复提交再发起新运行，直接重跑旧运行仍会使用旧版工作流。
 
-工作流分别生成 Linux x64 的 `.deb` / `.AppImage`、Windows x64 的 NSIS `.exe` / `.msi`，以及 macOS Apple Silicon / Intel 的 `.dmg`。所有平台成功后才上传完整安装包、生成 `SHA256SUMS.txt` 并公开 Release。构建失败不会发布；上传失败会留下草稿，可用同一标签重跑。已公开的 Release 不会被重跑覆盖。
+工作流分别生成 Linux x64 的 `.deb` / `.AppImage`、Windows x64 的 NSIS `.exe`，以及 macOS Apple Silicon / Intel 的 `.dmg`。所有平台成功后上传五个安装包、生成 `SHA256SUMS.txt` 并公开 Release。上传失败会留下草稿，可用同一标签重跑。
 
 发布使用内置 `GITHUB_TOKEN` 的 `contents: write` 权限，无需额外 PAT。当前 Windows 安装包未配置代码签名；macOS 使用 ad-hoc 签名，未做 Apple 公证，下载后系统可能要求确认。签名与公证方式可参阅 [Tauri 官方说明](https://v2.tauri.app/distribute/sign/macos/)。
 

@@ -50,7 +50,7 @@
 | 平台 | 安装包 |
 | --- | --- |
 | Linux x64 | DEB、AppImage |
-| Windows x64 | NSIS EXE、MSI |
+| Windows x64 | NSIS EXE |
 | macOS Apple Silicon / Intel | DMG |
 
 常用默认快捷键包括新建 `Ctrl+N`、打开 `Ctrl+O`、保存 `Ctrl+S`、查找 `Ctrl+F` 和切换源码模式 `Ctrl+Shift+M`。macOS 使用 `Cmd` 替代 `Ctrl`。

@@ -15,6 +15,19 @@ function strings(array: Element): string[] { return Array.from(array.children).m
 const root = plist.querySelector("plist > dict")!;
 
 describe("native document icon contracts", () => {
+  it("uses NSIS as the Windows installer target for local and CI builds", () => {
+    const windows = JSON.parse(readFileSync(resolve(tauri, "tauri.windows.conf.json"), "utf8"));
+    expect(windows.bundle.targets).toEqual(["nsis"]);
+    const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/build-installers.yml"), "utf8");
+    const entries = workflow.split(/\n          - os: /).slice(1).map(entry => entry.split(/\n    defaults:/)[0]);
+    const targets = entries.filter(entry => /target: \S+-pc-windows-msvc/.test(entry));
+    expect(targets).toHaveLength(1);
+    expect(targets[0]).toMatch(/\n            bundles: nsis(?:\n|$)/);
+    expect(workflow).not.toContain(".msi");
+    const release = readFileSync(resolve(process.cwd(), ".github/workflows/release.yml"), "utf8");
+    expect(release).not.toContain(".msi");
+  });
+
   it("retains macOS app bundles for verification while uploading only DMG installers", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/build-installers.yml"), "utf8");
     const entries = workflow.split(/\n          - os: /).slice(1).map(entry => entry.split(/\n    defaults:/)[0]);

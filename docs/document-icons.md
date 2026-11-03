@@ -54,7 +54,6 @@ Finder 为 MarkNext 关联文档显示独立文件图标。默认打开程序仍
 ## Windows NSIS
 
 使用独立 ICO 和 ProgID，并提供可选安装项，见 [Windows NSIS 说明](../src-tauri/windows/README.md)。
-MSI 仍使用 Tauri 默认文件关联配置，尚未单独适配文档图标。
 
 ## 验证
 

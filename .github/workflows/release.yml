@@ -132,8 +132,8 @@ jobs:
           from collections import Counter
           from pathlib import Path
           files = sorted(Path('release-assets').iterdir())
-          expected = Counter({'.deb': 1, '.AppImage': 1, '.exe': 1, '.msi': 1, '.dmg': 2})
-          if Counter(file.suffix for file in files if file.is_file() and file.stat().st_size > 0) != expected or len(files) != 6:
+          expected = Counter({'.deb': 1, '.AppImage': 1, '.exe': 1, '.dmg': 2})
+          if Counter(file.suffix for file in files if file.is_file() and file.stat().st_size > 0) != expected or len(files) != 5:
               raise SystemExit('Incomplete or unexpected installer set; release will not be published.')
           with open('release-assets/SHA256SUMS.txt', 'w') as output:
               for file in files:
