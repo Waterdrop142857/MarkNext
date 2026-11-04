@@ -15,6 +15,8 @@ export interface NativeFixture {
   requestWindowClose(): Promise<void>;
   savePath: string;
   allowedImages: string[];
+  openedUrls: string[];
+  failOpenUrl: boolean;
   disk: Record<string, string>;
   choices: string[];
   prompts: string[];
@@ -36,7 +38,7 @@ declare global { interface Window { nativeFixture: NativeFixture } }
 let completeRead: (() => void) | null = null;
 const fixture: NativeFixture = {
   openPath: "/old.md", disk: JSON.parse(localStorage.getItem("test-disk") ?? '{"/old.md":"original","/new.md":"replacement"}'),
-  savePath: "/saved.md", allowedImages: [], pathAliases: {}, notifications: [],
+  savePath: "/saved.md", allowedImages: [], openedUrls: [], failOpenUrl: false, pathAliases: {}, notifications: [],
   openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [], startupReady: [],
   async deliverFiles(paths) {
     const id = Math.max(0, ...fixture.openRequests.map(request => request.id), ...fixture.openRequestAcks) + 1;
@@ -86,6 +88,11 @@ mockIPC((command, args) => {
     return fixture.pathAliases[path] ?? `/${normalized.join("/")}`;
   }
   if (command === "allow_image_file") { fixture.allowedImages.push(String(payload.path)); return; }
+  if (command === "plugin:opener|open_url") {
+    if (fixture.failOpenUrl) throw new Error("Native URL opener unavailable");
+    fixture.openedUrls.push(String(payload.url));
+    return;
+  }
   if (command === "recovery_list") return { records: Object.values(fixture.recovery), unreadable: 0 };
   if (command === "recovery_write") {
     const snapshot = payload.snapshot as RecoverySnapshot;

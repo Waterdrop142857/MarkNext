@@ -2,6 +2,7 @@ import { test, expect } from "./fixtures";
 import metadata from "../../package.json" with { type: "json" };
 
 const { version } = metadata;
+const repository = "https://github.com/Waterdrop142857/MarkNext";
 
 for (const locale of ["zh-CN", "en"] as const) {
   for (const zoom of [100, 200]) {
@@ -30,12 +31,31 @@ for (const locale of ["zh-CN", "en"] as const) {
       await expect(dialog).toContainText(locale === "en"
         ? "A lightweight, minimalist Markdown editor" : "一个轻量级的极简主义Markdown编辑器");
       await expect(dialog).toContainText(version);
+      await expect(dialog).toContainText(locale === "en" ? "MIT License" : "MIT 许可证");
       const icon = dialog.locator("img");
       await expect(icon).toHaveAttribute("src", /icons\/marknext\.svg$/);
       await expect.poll(() => icon.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
 
       const confirm = dialog.getByRole("button", { name: locale === "en" ? "OK" : "确定", exact: true });
       await expect(confirm).toBeFocused();
+      const repositoryLink = dialog.getByRole("link", { name: locale === "en" ? "GitHub Repository" : "GitHub 仓库", exact: true });
+      await expect(repositoryLink).toHaveAttribute("href", repository);
+      await expect(repositoryLink).toHaveText(repository);
+      await expect(repositoryLink.locator("svg")).toBeVisible();
+      const appUrl = page.url();
+      await repositoryLink.click();
+      await expect.poll(() => page.evaluate(() => window.nativeFixture.openedUrls)).toEqual([repository]);
+      expect(page.url()).toBe(appUrl);
+      await page.evaluate(() => { window.nativeFixture.failOpenUrl = true; });
+      await repositoryLink.focus();
+      await page.keyboard.press("Enter");
+      await expect(dialog.getByRole("alert")).toContainText(locale === "en" ? "Could not open the repository" : "无法打开仓库链接");
+      await page.evaluate(() => { window.nativeFixture.failOpenUrl = false; });
+      await page.keyboard.press("Enter");
+      await expect(dialog.getByRole("alert")).toHaveCount(0);
+      await expect.poll(() => page.evaluate(() => window.nativeFixture.openedUrls)).toEqual([repository, repository]);
+      expect(page.url()).toBe(appUrl);
+      await confirm.focus();
       await page.keyboard.press("Tab");
       await page.keyboard.press("Tab");
       expect(await dialog.evaluate(node => node.contains(document.activeElement))).toBe(true);
