@@ -3,6 +3,10 @@
 Windows 安装包统一使用 NSIS EXE。`tauri.windows.conf.json` 将本地 Windows
 构建目标设为 `nsis`，main Artifacts 和 Release 使用同一构建目标。
 
+安装向导展示仓库根目录的 [MIT 许可证](../../LICENSE)。Windows 打包配置的
+`licenseFile` 和 `resources` 引用同一份文件，安装后保存在 `$INSTDIR\LICENSE`；
+静默安装及升级同样包含该文件，卸载时一并移除。
+
 NSIS 安装器在安装目录、快捷方式页面之后提供中/英文的“添加到打开方式”复选框，
 支持 `.md`、`.markdown`、`.txt`。新安装默认不勾选，升级保留已保存的选择；
 取消勾选会移除之前注册的 MarkNext 打开方式。
@@ -39,9 +43,11 @@ pwsh -NoProfile -File scripts/test-windows-installer.ps1 -Installer path/to/Mark
 
 脚本操作当前用户注册表和临时安装目录，拒绝已有 MarkNext 安装/关联的账户。
 覆盖：静默默认不注册、显式启用/禁用、升级保留选择、含空格及中文路径、独立图标
-字节一致、完整引号、默认程序及其他候选项保留、旧关联迁移、卸载清理。
+字节一致、MIT 许可证文件字节一致、完整引号、默认程序及其他候选项保留、旧关联
+迁移、卸载清理。
 
-另外手动检查：安装器前进/后退不丢失勾选状态；中文和英文文案可见；在资源管理器
+另外手动检查：安装向导的许可证页面展示完整 MIT 正文；安装器前进/后退不丢失
+勾选状态；中文和英文文案可见；在资源管理器
 为 `.md` / `.markdown` 选择 MarkNext 默认打开后显示文件图标，双击可打开文档，
 已有窗口时复用现有窗口。系统图标缓存更新由 `SHChangeNotify` 通知。
 

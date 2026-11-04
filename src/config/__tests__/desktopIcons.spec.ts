@@ -28,6 +28,17 @@ describe("native document icon contracts", () => {
     expect(release).not.toContain(".msi");
   });
 
+  it("uses the complete project MIT license for the Windows installer page and installed file", () => {
+    const windows = JSON.parse(readFileSync(resolve(tauri, "tauri.windows.conf.json"), "utf8"));
+    const projectLicense = resolve(process.cwd(), "LICENSE");
+    expect(windows.bundle.license).toBe("MIT");
+    expect(resolve(tauri, windows.bundle.licenseFile)).toBe(projectLicense);
+    const sources = Object.entries(windows.bundle.resources)
+      .filter(([, destination]) => destination === "LICENSE");
+    expect(sources).toHaveLength(1);
+    expect(resolve(tauri, sources[0]![0])).toBe(projectLicense);
+  });
+
   it("retains macOS app bundles for verification while uploading only DMG installers", () => {
     const workflow = readFileSync(resolve(process.cwd(), ".github/workflows/build-installers.yml"), "utf8");
     const entries = workflow.split(/\n          - os: /).slice(1).map(entry => entry.split(/\n    defaults:/)[0]);

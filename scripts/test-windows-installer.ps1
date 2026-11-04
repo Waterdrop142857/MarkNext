@@ -12,6 +12,7 @@ $other = 'MarkNext.InstallerTest.Other'
 $extensions = @('md', 'markdown', 'txt')
 $directory = Join-Path $env:TEMP ('MarkNext installer 测试 ' + [guid]::NewGuid())
 $iconSource = Join-Path $PSScriptRoot '../src-tauri/icons/markdown.ico'
+$licenseSource = Join-Path $PSScriptRoot '../LICENSE'
 
 function Assert-Equal($Actual, $Expected, [string]$Message) {
     if ($Actual -cne $Expected) { throw "$Message`: expected [$Expected], received [$Actual]" }
@@ -35,6 +36,7 @@ function Run-Setup([string]$Options) {
     # NSIS /D= must be last and unquoted, even for directories with spaces.
     $p = Start-Process -FilePath $Installer -ArgumentList "/S /NS $Options /D=$directory" -Wait -PassThru
     Assert-Equal $p.ExitCode 0 'Installer exit code'
+    Assert-Equal (Get-FileHash -LiteralPath "$directory\LICENSE").Hash (Get-FileHash -LiteralPath $licenseSource).Hash 'Packaged MIT license'
 }
 function Run-Uninstall {
     $exe = Join-Path $directory 'uninstall.exe'
@@ -122,8 +124,9 @@ try {
     Assert-Registration $false
     Assert-Equal (Read-Value "$classes\Markdown Document\shell\open\command") 'C:\Another Editor\editor.exe "%1"' 'Foreign legacy handler retained'
     Assert-Equal (Test-Path -LiteralPath "$directory\markdown.ico") $false 'Document icon removed'
+    Assert-Equal (Test-Path -LiteralPath "$directory\LICENSE") $false 'MIT license removed'
     Assert-Equal (Read-Value $preferences 'OpenWith') $null 'Preference removed'
-    Write-Host 'PASS: opt-in, opt-out, upgrades, quoting, icons, legacy migration, defaults and uninstall.'
+    Write-Host 'PASS: opt-in, opt-out, upgrades, quoting, icons, MIT license, legacy migration, defaults and uninstall.'
 } finally {
     Run-Uninstall
     foreach ($ext in $extensions) { Remove-Value "$classes\.$ext\OpenWithProgids" $other }
