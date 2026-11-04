@@ -127,7 +127,6 @@ export const en = {
   "status.source": "Source mode: Markdown syntax highlighting. Switch to WYSIWYG to render the document.",
   "status.editing": "Editing: {path}",
   "status.wysiwyg": "Edit with live Markdown rendering. Syntax appears temporarily near the cursor.",
-  "status.selection": "Selection/cursor activity",
   "status.words": "Words: {count}",
   "status.characters": "Characters: {count}",
   "status.showCharacters": "Switch to characters (including punctuation and spaces)",

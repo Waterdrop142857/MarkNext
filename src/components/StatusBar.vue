@@ -7,7 +7,6 @@ withDefaults(
     isSourceMode?: boolean;
     currentFilePath: string | null;
     isUntitled?: boolean;
-    selection?: unknown;
     statistics: DocumentStatistics;
     outlineOpen: boolean;
   }>(),
@@ -34,7 +33,6 @@ const countMode = ref<"words" | "characters">("words");
     <span v-else class="status-document">
       {{ t('status.wysiwyg') }}
     </span>
-    <span v-if="selection" class="status-selection">{{ t('status.selection') }}</span>
     <button type="button" class="document-statistics" :title="t('status.countDescription')"
       :aria-label="`${t(countMode === 'words' ? 'status.words' : 'status.characters', { count: statistics[countMode] })}; ${t(countMode === 'words' ? 'status.showCharacters' : 'status.showWords')}`"
       @click="countMode = countMode === 'words' ? 'characters' : 'words'">

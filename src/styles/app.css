@@ -515,7 +515,6 @@
 .outline-toggle:hover, .outline-toggle[aria-expanded="true"], .document-statistics:hover { background: var(--app-menubar-hover); }
 .outline-toggle:focus-visible, .document-statistics:focus-visible { outline: 1px solid var(--app-ui-focus-color); outline-offset: -1px; }
 .document-statistics { white-space: nowrap; font-variant-numeric: tabular-nums; }
-@media (max-width: 600px) { .app-footer .status-selection { display: none; } }
 
 /* Dark theme refinements */
 :root[data-theme="dark"] .empty-state {

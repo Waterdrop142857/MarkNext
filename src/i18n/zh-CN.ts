@@ -129,7 +129,6 @@ export const zhCN = {
   "status.source": "源码模式：不渲染 Markdown，仅做语法高亮；切换回 WYSIWYG 后会重新解析。",
   "status.editing": "正在编辑：{path}",
   "status.wysiwyg": "输入即所见即所得，Markdown 语法会在光标附近临时显示。",
-  "status.selection": "有选区/光标事件",
   "status.words": "字数：{count}",
   "status.characters": "字符数：{count}",
   "status.showCharacters": "切换到字符数（含标点和空格）",

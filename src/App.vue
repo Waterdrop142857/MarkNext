@@ -60,7 +60,6 @@ const {
   isUntitled,
   isSourceMode,
   documentGeneration,
-  selection,
   dirty,
 } = workspace;
 const { analysis, refresh: refreshAnalysis } = useDocumentAnalysis(markdown, documentGeneration);
@@ -601,7 +600,6 @@ onBeforeUnmount(() => {
       :is-source-mode="isSourceMode"
       :current-file-path="currentFilePath"
       :is-untitled="isUntitled"
-      :selection="selection"
       :statistics="analysis.statistics"
       :outline-open="outlineOpen"
       @toggle-outline="outlineOpen = !outlineOpen"
