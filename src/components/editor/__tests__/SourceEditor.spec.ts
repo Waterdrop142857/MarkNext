@@ -107,6 +107,39 @@ describe("source search and history", () => {
     value.value = "different structure"; await nextTick(); active.value = true; await nextTick(); source.value!.undo();
     expect(source.value!.getValue()).toBe("different structure");
   });
+  it("defers inactive document updates and clears stale history once on activation", async () => {
+    const { source, editor, value, active } = await mount("original");
+    source.value!.pasteText("source "); await nextTick();
+    active.value = false; await nextTick();
+    const writes = vi.spyOn(editor(), "setValue");
+    const resetHistory = vi.spyOn(editor(), "clearHistory");
+    value.value = "first change"; await nextTick();
+    value.value = "latest change"; await nextTick();
+    expect(writes).not.toHaveBeenCalled();
+    expect(resetHistory).not.toHaveBeenCalled();
+    active.value = true; await nextTick();
+    expect(writes).toHaveBeenCalledTimes(1);
+    expect(resetHistory).toHaveBeenCalledTimes(1);
+    expect(source.value!.getValue()).toBe("latest change");
+    source.value!.undo();
+    expect(source.value!.getValue()).toBe("latest change");
+    source.value!.pasteText("new "); await nextTick();
+    source.value!.undo();
+    expect(source.value!.getValue()).toBe("latest change");
+  });
+  it("preserves cached source history when inactive edits return to the same content", async () => {
+    const { source, editor, value, active } = await mount("original");
+    source.value!.pasteText("source "); await nextTick();
+    const cached = value.value;
+    active.value = false; await nextTick();
+    const writes = vi.spyOn(editor(), "setValue");
+    value.value = "temporary"; await nextTick();
+    value.value = cached; await nextTick();
+    active.value = true; await nextTick();
+    expect(writes).not.toHaveBeenCalled();
+    source.value!.undo();
+    expect(source.value!.getValue()).toBe("original");
+  });
   it("a different document generation cannot inherit previous undo history", async () => {
     const { source, value, generation } = await mount("original"); source.value!.pasteText("edit "); await nextTick();
     value.value = "new document"; generation.value++; await nextTick(); source.value!.undo(); expect(source.value!.getValue()).toBe("new document");

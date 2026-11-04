@@ -135,6 +135,8 @@ pnpm exec playwright install --with-deps chromium
 
 段落菜单覆盖：`editorSession.spec.ts` 验证两种模式的 H1–H6、行内格式、表格插入、独立撤销/重做、源码选区边界及挂起保护；`shortcuts.spec.ts` 验证新增命令默认无绑定、自定义绑定和原生 HTML 格式快捷键隔离。浏览器 `paragraphMenu.spec.ts` 验证真实菜单点击保留选区、三组分类、无文档禁用、自定义快捷键以及修改后的保存/撤销/重做。图片和超链接插入可编辑的 Markdown 标记并将光标置于地址处；表格默认三列，包含表头和两行正文。
 
+源码格式化回归还覆盖 Setext 标题的正文及下划线落点、多行标题转换，以及分隔线、代码和 frontmatter 的边界。链接与图片标签覆盖方括号、已有转义及末尾反斜杠，并验证插入光标和独立撤销重做。隐藏的源码实例在重新激活时同步最新正文，相关用例检查连续编辑期间的全文更新次数、旧历史失效、相同内容的历史保留，以及挂起恢复后的内容一致性。上述编辑器内部行为可直接使用 Playwright 验证，原生平台交互按用户报错反馈流程选择对应环境。
+
 多文件与单窗口新增覆盖：`src/composables/__tests__/documentTabs.spec.ts` / `nativeFileRequests.spec.ts`、浏览器 `documentTabs.spec.ts` / `nativeFiles.spec.ts` 及 Rust `window_instance` 测试。覆盖每文件历史/模式隔离、唯一活动渲染器、关闭事务、路径去重、恢复、原生请求队列及安装器配置。浏览器原生 IPC 仍使用官方 mocks，窗口管理器焦点和安装后的文件关联按 [手动指南](../docs/multi-file.md#手动验收) 在对应系统验证。
 
 冷启动覆盖：`src/services/__tests__/startup.spec.ts`、`src/editor/__tests__/loadEditorSession.spec.ts`、浏览器 `startup.spec.ts` 及 Rust `window_instance::tests` 验证前置主题、开发/生产入口延迟、显示后的空闲预加载与按需加载共享、失败后的重新加载、窗口就绪代号及带值启动参数。流程和人工验收见 [启动设计](../docs/startup.md)。

@@ -1,5 +1,6 @@
 import type CodeMirror from "codemirror";
 import { headingLevels, isHeadingCommand, type ParagraphCommand } from "./paragraphCommands";
+import { lexBlock } from "../muya/utils/marked/lexBlock";
 
 /** One menu action is one undo group, independent of adjacent typing. */
 export function formatSource(editor: CodeMirror.Editor, command: ParagraphCommand): void {
@@ -8,14 +9,7 @@ export function formatSource(editor: CodeMirror.Editor, command: ParagraphComman
   editor.operation(() => {
     const from = editor.getCursor("from"), to = editor.getCursor("to");
     if (isHeadingCommand(command)) {
-      const level = headingLevels[command];
-      const last = to.line > from.line && to.ch === 0 ? to.line - 1 : to.line;
-      const end = { line: last, ch: editor.getLine(last).length };
-      const text = editor.getRange({ line: from.line, ch: 0 }, end);
-      const prefix = level ? `${"#".repeat(level)} ` : "";
-      const next = text.split("\n").map(line => prefix + line.replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, "")).join("\n");
-      editor.replaceRange(next, { line: from.line, ch: 0 }, end, "+paragraph");
-      editor.setSelection({ line: from.line, ch: prefix.length }, { line: last, ch: editor.getLine(last).length });
+      formatHeading(editor, from, to, headingLevels[command]);
     } else if (command === "insertTable") {
       const line = to.line > from.line && to.ch === 0 ? to.line - 1 : to.line;
       const at = { line, ch: editor.getLine(line).length };
@@ -30,7 +24,10 @@ export function formatSource(editor: CodeMirror.Editor, command: ParagraphComman
       if (command === "insertLink" || command === "insertImage") {
         if (from.line !== to.line) return;
         const prefix = command === "insertImage" ? "![" : "[";
-        const text = prefix + selected + "]()";
+        // Preserve existing escapes, and keep a trailing backslash from
+        // escaping the closing bracket supplied by this command.
+        const label = selected.replace(/\\.|\\$|[\[\]]/g, value => value.length === 1 ? `\\${value}` : value);
+        const text = prefix + label + "]()";
         editor.replaceRange(text, from, to, "+paragraph");
         editor.setCursor(editor.posFromIndex(start + text.length - 1));
       } else {
@@ -55,6 +52,41 @@ export function formatSource(editor: CodeMirror.Editor, command: ParagraphComman
   });
   editor.getDoc().changeGeneration(true);
   editor.focus();
+}
+
+function formatHeading(editor: CodeMirror.Editor, from: CodeMirror.Position, to: CodeMirror.Position, level: number) {
+  let first = from.line;
+  let last = to.line > from.line && to.ch === 0 ? to.line - 1 : to.line;
+  const setext = new Map<number, number>();
+  let line = 0;
+  // Parse blocks so thematic breaks, code, HTML and frontmatter delimiters
+  // cannot be mistaken for a Setext heading's underline.
+  for (const token of lexBlock(editor.getValue())) {
+    if (token.type === "heading" && token.headingStyle === "setext") {
+      const underline = line + token.raw.trimEnd().split("\n").length - 1;
+      if (line <= last && underline >= first) {
+        setext.set(line, underline);
+        first = Math.min(first, line);
+        last = Math.max(last, underline);
+      }
+    }
+    line += (token.raw.match(/\n/g) ?? []).length;
+  }
+  const prefix = level ? `${"#".repeat(level)} ` : "";
+  const next: string[] = [];
+  for (line = first; line <= last; line++) {
+    const underline = setext.get(line);
+    if (underline !== undefined) {
+      const text = editor.getRange({ line, ch: 0 }, { line: underline - 1, ch: editor.getLine(underline - 1).length });
+      if (level) next.push(prefix + text.split("\n").map(part => part.trim()).join(" "));
+      else next.push(...text.split("\n"));
+      line = underline;
+    } else {
+      next.push(prefix + editor.getLine(line).replace(/^ {0,3}#{1,6}(?:[ \t]+|$)/, ""));
+    }
+  }
+  editor.replaceRange(next.join("\n"), { line: first, ch: 0 }, { line: last, ch: editor.getLine(last).length }, "+paragraph");
+  editor.setSelection({ line: first, ch: prefix.length }, { line: first + next.length - 1, ch: next[next.length - 1].length });
 }
 
 type InlineCommand = "bold" | "italic" | "strikethrough";

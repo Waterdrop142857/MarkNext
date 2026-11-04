@@ -7,6 +7,7 @@ import EditorSession from "../../components/EditorSession.vue";
 import type { EditorSessionCheckpoint } from "../sessionTypes";
 import * as clipboard from "../../services/clipboard";
 import type { ParagraphCommand } from "../paragraphCommands";
+import { marked } from "marked";
 
 const cleanup: (() => void)[] = [];
 const engines: Muya[] = [];
@@ -178,6 +179,70 @@ describe("editor session lifecycle", () => {
     await session.value!.toggleMode(); await session.value!.suspend(); await session.value!.resume();
     await session.value!.toggleMode(); session.value!.undo(); await nextTick();
     expect(source().getValue().trim()).toBe("start");
+  });
+
+  it("restores current content after suspending with an outdated hidden source", async () => {
+    const { session, source, getMuya, markdown } = await mount("start");
+    await session.value!.toggleMode();
+    source().replaceRange("source ", { line: 0, ch: 0 }); await nextTick();
+    await session.value!.toggleMode();
+    getMuya()!.replaceContent("latest WYSIWYG"); session.value!.flush(); await nextTick();
+    const checkpoint = await session.value!.suspend();
+    expect(checkpoint?.active.markdown.trim()).toBe("latest WYSIWYG");
+    expect(await session.value!.resume()).toBe(true);
+    await session.value!.toggleMode();
+    expect(source().getValue().trim()).toBe("latest WYSIWYG");
+    session.value!.undo(); await nextTick();
+    expect(markdown.value.trim()).toBe("latest WYSIWYG");
+  });
+
+  it.each([
+    ["Title\n-----\n", "paragraph", 0, "Title\n"],
+    ["Title\n=====\n", "heading3", 0, "### Title\n"],
+    ["Title\n-----\n", "heading1", 1, "# Title\n"],
+    ["First\nsecond\n-----\n\nnext", "heading2", 1, "## First second\n\nnext"],
+    ["First\nsecond\n=====\n", "paragraph", 1, "First\nsecond\n"],
+    ["Text\n\n---\n", "paragraph", 0, "Text\n\n---\n"],
+    ["```\nTitle\n-----\n```", "paragraph", 1, "```\nTitle\n-----\n```"],
+    ["---\ntitle: Example\n---\n\nTitle\n-----", "paragraph", 1, "---\ntitle: Example\n---\n\nTitle\n-----"],
+  ] as const)("converts source heading blocks without consuming unrelated syntax (%s, %s)", async (text, command, line, expected) => {
+    const view = await mount(text);
+    await view.session.value!.toggleMode();
+    view.source().setCursor(line, 0);
+    const original = view.source().getValue();
+    view.session.value!.format(command); await nextTick();
+    expect(view.source().getValue()).toBe(expected);
+    if (original !== expected) {
+      view.session.value!.undo(); await nextTick();
+      expect(view.source().getValue()).toBe(original);
+      view.session.value!.redo(); await nextTick();
+      expect(view.source().getValue()).toBe(expected);
+    }
+  });
+
+  it.each(["insertLink", "insertImage"] as const)("escapes source labels without double-escaping existing Markdown (%s)", async command => {
+    for (const [text, label] of [
+      ["a]b", String.raw`a\]b`],
+      ["a[b", String.raw`a\[b`],
+      [String.raw`a\]b`, String.raw`a\]b`],
+      [String.raw`a\\]b`, String.raw`a\\\]b`],
+      ["tail\\", String.raw`tail\\`],
+      ["**bold**", "**bold**"],
+    ]) {
+      const view = await mount(text);
+      await view.session.value!.toggleMode();
+      view.session.value!.selectAll();
+      view.session.value!.format(command); await nextTick();
+      const expected = `${command === "insertImage" ? "!" : ""}[${label}]()`;
+      expect(view.source().getValue()).toBe(expected);
+      const html = marked.parse(expected) as string;
+      expect(html).toContain(command === "insertImage" ? "<img " : "<a ");
+      expect(view.source().getCursor().ch).toBe(expected.length - 1);
+      view.session.value!.undo(); await nextTick();
+      expect(view.source().getValue()).toBe(text);
+      view.session.value!.redo(); await nextTick();
+      expect(view.source().getValue()).toBe(expected);
+    }
   });
 
   it.each([false, true])("restores a portable checkpoint after the whole session component is destroyed: source=%s", async sourceMode => {

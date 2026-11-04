@@ -85,9 +85,10 @@ onMounted(() => {
 });
 
 watch(
-  () => props.modelValue,
-  (value) => {
-    if (!cm) return;
+  [() => props.modelValue, () => props.active],
+  ([value, active]) => {
+    // Hidden renderers catch up once when activated, using the latest model.
+    if (!cm || disposed || !active) return;
     if (value !== cm.getValue()) {
       suppressModelEmission = true;
       try {
