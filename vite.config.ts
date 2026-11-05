@@ -18,6 +18,7 @@ export default defineConfig(async () => ({
 
   build: {
     chunkSizeWarningLimit: 1500,
+    rollupOptions: { input: { main: "index.html", pdf: "pdf-export.html" } },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

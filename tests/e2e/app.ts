@@ -1,6 +1,7 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import type { RecoverySnapshot } from "../../src/document/types";
+import type { PdfPayload } from "../../src/export/pdfOptions";
 
 // Test-only entry point. The production bundle starts from index.html and
 // never imports these native mocks; all UI/editor code remains the real app.
@@ -17,6 +18,9 @@ export interface NativeFixture {
   allowedImages: string[];
   openedUrls: string[];
   failOpenUrl: boolean;
+  pdfExports: { path: string; payload: PdfPayload }[];
+  pdfError: string | null;
+  cancelSave: boolean;
   disk: Record<string, string>;
   choices: string[];
   prompts: string[];
@@ -39,6 +43,7 @@ let completeRead: (() => void) | null = null;
 const fixture: NativeFixture = {
   openPath: "/old.md", disk: JSON.parse(localStorage.getItem("test-disk") ?? '{"/old.md":"original","/new.md":"replacement"}'),
   savePath: "/saved.md", allowedImages: [], openedUrls: [], failOpenUrl: false, pathAliases: {}, notifications: [],
+  pdfExports: [], pdfError: null, cancelSave: false,
   openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [], startupReady: [],
   async deliverFiles(paths) {
     const id = Math.max(0, ...fixture.openRequests.map(request => request.id), ...fixture.openRequestAcks) + 1;
@@ -80,7 +85,7 @@ mockIPC((command, args) => {
     return;
   }
   if (command === "plugin:dialog|open") { fixture.dialogTitles.push(String(payload.options && (payload.options as { title?: string }).title)); return fixture.openPath; }
-  if (command === "plugin:dialog|save") return fixture.savePath;
+  if (command === "plugin:dialog|save") return fixture.cancelSave ? null : fixture.savePath;
   if (command === "canonical_document_path") {
     const path = String(payload.path);
     const normalized: string[] = [];
@@ -88,6 +93,11 @@ mockIPC((command, args) => {
     return fixture.pathAliases[path] ?? `/${normalized.join("/")}`;
   }
   if (command === "allow_image_file") { fixture.allowedImages.push(String(payload.path)); return; }
+  if (command === "export_pdf") {
+    if (fixture.pdfError) throw new Error(fixture.pdfError);
+    fixture.pdfExports.push(structuredClone(payload) as { path: string; payload: PdfPayload });
+    return;
+  }
   if (command === "plugin:opener|open_url") {
     if (fixture.failOpenUrl) throw new Error("Native URL opener unavailable");
     fixture.openedUrls.push(String(payload.url));

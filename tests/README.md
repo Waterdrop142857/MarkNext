@@ -192,6 +192,8 @@ MARKNEXT_WEBKIT_EXECUTABLE 只覆盖 WebKit 的启动器路径，测试项目、
 
 ## Linux 原生文件拖放回归
 
+PDF 功能的独立原生测试见文末“原生 PDF 导出回归”。
+
 `tests/native/file_drop.py` 启动真实 Tauri 和外部 GTK 文件拖放源，通过鼠标拖动及系统剪贴板检查编辑器内容。需要 GTK 3 的 Python GI 绑定、`xdotool`、`Xvfb`、`dbus-run-session`，以及已构建的调试版二进制。测试使用独立显示屏、独立 D-Bus 会话及临时文档/设置，避免命中开发者当前的应用单实例；用例不通过 JavaScript 派发拖放或模拟 IPC。
 
 在项目根目录先准备调试版，并在单独终端保持 `pnpm dev` 运行，再执行：
@@ -212,6 +214,50 @@ dbus-run-session -- python3 tests/native/file_drop.py --display :96
 本次复现使用系统 WebKitGTK 2.54.2、GTK 3 和独立 Xvfb。旧实现能收到 URI，但因读取被 Tauri 移除的运行时文件关联列表而过滤掉所有文档；真实 `generate_context!()` 的 Rust 回归在旧实现失败、修复后通过。另以兼容 ICU 环境执行 `nativeFiles.spec.ts` 的 5 项 WebKit 浏览器回归，通过后再执行原生测试。X11 原生回归不代替实际 niri/Wayland 文件管理器和 Windows/macOS 的验收。
 
 补充原生 Wayland 验证：在 Xvfb 内运行 Weston 的嵌套 Wayland 会话，使 Tauri 使用 `GdkWaylandDisplay`、Dolphin 使用 Qt Wayland 平台。外部 GTK 源及实际 Dolphin 文件管理器均成功拖入含中文/空格/`#`/`%` 的 Markdown 文件；GTK 源收到 COPY 确认，编辑器内容通过真实 Wayland 剪贴板读回并与文件比较，源文件保留且内容不变。此轮为独立原生集成验证，记录位于 `test-results/native-wayland/`；上面的自动脚本仍只声明 X11 支持。Weston 验证不等同于用户的 niri 会话验收。
+
+## 原生 PDF 导出回归
+
+仅在修改 PDF 渲染、资源处理、页面参数、原生打印或导出文件写入时执行。
+Linux 需要 GTK 3 的 Python GI 绑定、`xdotool`、Xvfb、`dbus-run-session` 及 Poppler
+的 `pdftotext` / `pdftoppm`。先在独立终端保持开发前端运行并构建调试版：
+
+```bash
+pnpm dev
+cargo build --locked --manifest-path src-tauri/Cargo.toml
+Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -ac
+```
+
+再从项目根目录、调用者的原显示屏环境执行：
+
+```bash
+dbus-run-session -- python3 tests/native/pdf_export.py --display :96
+```
+
+脚本拒绝使用调用者当前的显示屏，为程序隔离配置、草稿、缓存、输入文件及 D-Bus，
+并设置 `GTK_USE_PORTAL=0` 使用该测试屏幕中的 GTK 原生保存对话框，避免由用户桌面的
+portal 展示文件窗口。测试通过真实菜单、键盘及保存窗口操作，不模拟 IPC，也不使用
+Chromium 的 PDF 接口。`:96` 被占用时需换用其他专用 Xvfb；不要复用用户会话。
+
+覆盖 A4 纵向、ISO B5 横向、自定义尺寸、三组四边边距、多页内容、中文、公式、图表、
+代码及带特殊字符路径的图片。直接检查生成 PDF 的纸张尺寸、文字边界及全文完整性。
+产物在 `test-results/native-pdf/`，包含 PDF、文字坐标、截图和日志。
+该脚本证明 X11 / GTK 文件后端的行为，不替代 Wayland portal、Windows 或 macOS 验收。
+
+检查打包资源路径时，先构建前端，再启用 Tauri 的生产资源协议构建调试版，关闭开发
+服务器后执行同一脚本。这样可以确认独立导出入口不依赖 Vite：
+
+```bash
+pnpm build
+cargo build --locked --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
+dbus-run-session -- python3 tests/native/pdf_export.py --display :96 --artifacts test-results/native-pdf-production
+```
+
+系统已生成中文 locale 时，可增加 `--locale zh_CN.UTF-8` 检查本地化的 GTK 文件输出
+后端。测试还覆盖新建但未保存的空文档导出为一页空白 PDF。
+
+相关浏览器测试 `tests/e2e/pdfExport.spec.ts` 仅验证设置界面、快照、校验、取消和错误
+反馈，不作为原生 PDF 输出证明。Windows/macOS 手动验收应使用相同文档和纸张参数，
+检查纸张尺寸、横竖方向、四边边距、公式/图表、取消及失败后的目标文件保护。
 
 ## 覆盖边界
 

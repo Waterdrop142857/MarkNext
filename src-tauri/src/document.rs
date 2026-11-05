@@ -12,7 +12,7 @@ use codec::{content_version, decode_document};
 pub(crate) use codec::{encode_document, FileEncoding, ReadDocument};
 #[cfg(test)]
 use images::image_file_path;
-pub(crate) use io::{atomic_write, FileError};
+pub(crate) use io::{atomic_write, guarded_atomic_write, FileError};
 #[cfg(test)]
 use io::{checked_atomic_write, TEMP_FILE_SEQUENCE};
 use io::{disk_stamp, file_version_sync, read_file_sync, write_file_sync};

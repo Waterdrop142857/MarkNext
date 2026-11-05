@@ -32,7 +32,7 @@ export class MarkdownToHtml {
 
     constructor(public markdown: string, private _muya?: Muya) {}
 
-    private async _renderMermaid() {
+    private async _renderMermaid(svgLabels = false) {
         const codes = this._exportContainer!.querySelectorAll(
             'code.language-mermaid',
         );
@@ -59,6 +59,7 @@ export class MarkdownToHtml {
             startOnLoad: false,
             securityLevel: 'strict',
             theme: 'default',
+            ...(svgLabels ? { htmlLabels: false } : {}),
         });
         // Render each diagram in isolation: `mermaid.run` rejects the whole
         // batch on the first parse error, so one invalid diagram used to abort
@@ -180,7 +181,7 @@ export class MarkdownToHtml {
     }
 
     // render pure html by marked
-    async renderHtml() {
+    async renderHtml(transformHtml?: (html: string) => Promise<string>, svgLabels = false) {
         const footnote = this._muya?.options?.footnote ?? false;
         let html = getHighlightHtml(this.markdown, {
             superSubScript: this._muya?.options?.superSubScript ?? true,
@@ -198,6 +199,8 @@ export class MarkdownToHtml {
             html = transformFootnotes(html);
 
         html = sanitize(html, EXPORT_DOMPURIFY_CONFIG, false) as string;
+        if (transformHtml)
+            html = await transformHtml(html);
 
         const exportContainer = (this._exportContainer
             = document.createElement('div'));
@@ -206,7 +209,7 @@ export class MarkdownToHtml {
         document.body.appendChild(exportContainer);
 
         // render only render the light theme of mermaid and diagram...
-        await this._renderMermaid();
+        await this._renderMermaid(svgLabels);
         await this._renderDiagram();
 
         // Inject github-compatible slug ids onto exported headings so the
@@ -253,9 +256,13 @@ export class MarkdownToHtml {
             extraCSS?: string;
             inlineStyles?: boolean;
             dir?: string;
+            /** Resolve and authorize resources before attaching the export DOM. */
+            transformHtml?: (html: string) => Promise<string>;
+            /** Avoid foreignObject labels for a static SVG/PDF consumer. */
+            svgLabels?: boolean;
         } = {},
     ) {
-        const html = await this.renderHtml();
+        const html = await this.renderHtml(options.transformHtml, options.svgLabels);
 
         // `extraCSS` may changed in the mean time.
         const { title = '', extraCSS = '', inlineStyles = true, dir } = options;

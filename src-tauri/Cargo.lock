@@ -2018,6 +2018,10 @@ name = "marknext"
 version = "0.3.0"
 dependencies = [
  "gtk",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "objc2-web-kit",
  "serde",
  "serde_json",
  "sha2",
@@ -2026,6 +2030,9 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
+ "webkit2gtk",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

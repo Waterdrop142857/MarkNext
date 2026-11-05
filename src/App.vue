@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import type EditorSessionComponent from "./components/EditorSession.vue";
 import { loadEditorSession } from "./editor/loadEditorSession";
@@ -33,6 +33,10 @@ import { showError, askDiscardRecovery } from "./services/dialogs";
 import { t, useI18n } from "./i18n";
 import { appMenus } from "./config/menus";
 import { createParagraphHandlers, paragraphCommandIds } from "./editor/paragraphCommands";
+import type { PdfSnapshot } from "./export/pdfOptions";
+
+const PdfExportDialog = defineAsyncComponent(() => import("./components/PdfExportDialog.vue"));
+const pdfSnapshot = shallowRef<PdfSnapshot | null>(null);
 
 const { locale } = useI18n();
 const { preferences, save: savePreferences } = usePreferences();
@@ -152,6 +156,21 @@ function onEditorAvailability(event: EditorEvent<boolean>) {
   if (documentTabs.isCurrentRenderer(event)) editorAvailable.value = event.value;
 }
 function flushEditor() { editorSessionRef.value?.flush(); }
+async function openPdfExport(): Promise<boolean> {
+  const id = documentTabs.activeId.value;
+  if (!id || !editorAvailable.value || pdfSnapshot.value) return false;
+  flushEditor();
+  await nextTick();
+  if (documentTabs.activeId.value !== id || !editorAvailable.value) return false;
+  contextMenu.value = null;
+  pdfSnapshot.value = {
+    markdown: markdown.value, title: documentTabs.title.value, sourcePath: currentFilePath.value,
+    fontFamily: editorAppearance.value.editorFontFamily,
+    codeFontFamily: editorAppearance.value.codeFontFamily,
+    fontSize: editorAppearance.value.fontSize,
+  };
+  return true;
+}
 const documentActions = documentTabs.actions;
 const recovery = documentTabs.recovery;
 const nativeFiles = useNativeFileRequests(async paths => {
@@ -438,8 +457,10 @@ const commandRegistry = createCommandRegistry({
     void invoke("open_devtools").catch(error => console.error("Failed to open devtools:", error));
   },
   about: () => { contextMenu.value = null; aboutOpen.value = true; },
+  exportPdf: openPdfExport,
   tabClose: request => { void closeTab(request.tabId); },
 }, request => !documentTabs.busy.value
+  && (request.id !== "exportPdf" || (!!documentTabs.activeId.value && editorAvailable.value && !pdfSnapshot.value))
   && (!paragraphCommandIds.has(request.id) || (!!documentTabs.activeId.value && editorAvailable.value))
   && (!!documentTabs.activeId.value || !["save", "saveAs", "saveAll", "close", "closeAll"].includes(request.id))
   && (request.id !== "devtools" || import.meta.env.DEV)
@@ -448,7 +469,7 @@ const commandRegistry = createCommandRegistry({
 const handleShortcut = createShortcutHandler({
   bindings: () => shortcutBindings.value,
   defaults: defaultBindings,
-  blocked: () => settingsOpen.value || recoveryOpen.value || aboutOpen.value,
+  blocked: () => settingsOpen.value || recoveryOpen.value || aboutOpen.value || !!pdfSnapshot.value,
   execute: runMenuCommand,
 });
 function handleGlobalKeydown(event: KeyboardEvent) {
@@ -632,5 +653,6 @@ onBeforeUnmount(() => {
       @close="recoveryOpen = false"
     />
     <AboutDialog v-if="aboutOpen" @close="aboutOpen = false" />
+    <PdfExportDialog v-if="pdfSnapshot" :snapshot="pdfSnapshot" @close="pdfSnapshot = null" />
   </div>
 </template>

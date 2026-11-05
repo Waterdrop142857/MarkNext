@@ -1,6 +1,6 @@
 import type { ShortcutCommand } from "../config/shortcuts";
 
-export type CommandId = ShortcutCommand | "settings" | "recovery" | "reload" | "overwrite" | "tabClose";
+export type CommandId = ShortcutCommand | "settings" | "recovery" | "reload" | "overwrite" | "tabClose" | "exportPdf";
 export type CommandRequest =
   | { readonly id: Exclude<CommandId, "tabClose"> }
   | { readonly id: "tabClose"; readonly tabId: string };

@@ -131,7 +131,16 @@ pub(super) fn write_file_sync(
 }
 
 pub(crate) fn atomic_write(path: &Path, content: &[u8]) -> io::Result<()> {
-    checked_atomic_write(path, content, || Ok(())).map_err(|error| io::Error::other(error.message))
+    guarded_atomic_write(path, content, || Ok(()))
+}
+
+pub(crate) fn guarded_atomic_write(
+    path: &Path,
+    content: &[u8],
+    mut check: impl FnMut() -> io::Result<()>,
+) -> io::Result<()> {
+    checked_atomic_write(path, content, || check().map_err(Into::into))
+        .map_err(|error| io::Error::other(error.message))
 }
 
 pub(super) fn checked_atomic_write(

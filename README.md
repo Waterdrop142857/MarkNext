@@ -43,6 +43,13 @@
 - 可选择 UTF-8、UTF-8 BOM、UTF-16 LE/BE 默认文件编码。
 - 可自定义快捷键，支持多组键位、冲突检测和恢复默认。
 
+### PDF 导出
+
+- 通过系统 WebView 导出 PDF，无需另装 Chromium 或文档转换器。
+- 支持 A4、A5、ISO B5、Letter、自定义尺寸、横竖方向和四边页边距。
+- 使用当前正文快照，保留代码高亮、公式、图表和图片，不改变原文件或撤销历史。
+- 详细用法与平台验证范围见 [PDF 导出说明](docs/pdf-export.md)。
+
 ## 下载与使用
 
 在 [GitHub Releases](https://github.com/Waterdrop142857/MarkNext/releases) 下载对应平台的安装包。

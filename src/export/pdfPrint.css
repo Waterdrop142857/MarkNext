@@ -1,0 +1,31 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  background: white;
+  color: #1f2328;
+}
+.markdown-body {
+  min-width: 0;
+  /* WebKitGTK reports an invalid page range for a zero-height document. */
+  min-height: 1px;
+  max-width: none;
+  margin: 0;
+  padding: 0 !important;
+  font-size: var(--pdf-font-size);
+}
+h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+pre, table { break-inside: auto; }
+thead { display: table-header-group; }
+tr, img, .mermaid, .flowchart, .sequence, .vega-lite { break-inside: avoid; }
+/* KaTeX's internal SVGs have their own stretch geometry. */
+img, .mermaid > svg, .flowchart > svg, .sequence > svg, .vega-lite > svg {
+  max-width: 100%;
+  max-height: var(--pdf-content-height);
+  height: auto;
+}
+img { object-fit: contain; }
+* { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+@media screen {
+  body { width: var(--pdf-content-width); }
+}

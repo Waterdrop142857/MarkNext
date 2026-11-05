@@ -36,7 +36,9 @@ pub fn run() {
     if !initial.is_empty() {
         let _ = instance.enqueue(initial);
     }
-    let builder = tauri::Builder::default().manage(instance);
+    let builder = tauri::Builder::default()
+        .manage(instance)
+        .manage(crate::pdf_export::PdfExports::default());
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(crate::linux_file_drop::plugin());
     #[cfg(desktop)]
@@ -75,6 +77,7 @@ pub fn run() {
             if window.label() == window_instance::MAIN_WINDOW
                 && matches!(event, tauri::WindowEvent::Destroyed)
             {
+                crate::pdf_export::cancel_for_main(window.app_handle());
                 window_instance::invalidate_startup(window.app_handle());
             }
         })
@@ -95,6 +98,9 @@ pub fn run() {
             window_instance::acknowledge_open_request,
             window_instance::startup_generation,
             window_instance::startup_ready,
+            crate::pdf_export::export_pdf,
+            crate::pdf_export::pdf_export_payload,
+            crate::pdf_export::pdf_export_ready,
             open_devtools
         ])
         .build(context)
