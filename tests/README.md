@@ -215,6 +215,27 @@ dbus-run-session -- python3 tests/native/file_drop.py --display :96
 
 补充原生 Wayland 验证：在 Xvfb 内运行 Weston 的嵌套 Wayland 会话，使 Tauri 使用 `GdkWaylandDisplay`、Dolphin 使用 Qt Wayland 平台。外部 GTK 源及实际 Dolphin 文件管理器均成功拖入含中文/空格/`#`/`%` 的 Markdown 文件；GTK 源收到 COPY 确认，编辑器内容通过真实 Wayland 剪贴板读回并与文件比较，源文件保留且内容不变。此轮为独立原生集成验证，记录位于 `test-results/native-wayland/`；上面的自动脚本仍只声明 X11 支持。Weston 验证不等同于用户的 niri 会话验收。
 
+## HTML 导出回归
+
+前端验证：`pnpm typecheck`，以及
+`pnpm exec vitest run src/export/__tests__ src/i18n/__tests__ src/application/__tests__/commands.spec.ts`。
+构建后运行 `pnpm exec playwright test --project=chromium tests/e2e/htmlExport.spec.ts tests/e2e/pdfExport.spec.ts`。
+浏览器测试覆盖中英文菜单、未保存快照、取消、失败重试、切换标签、撤销历史，以及真实渲染器生成的
+HTML 在阻断网络后独立显示公式、图表、本地图片及高亮；系统保存及写入仍需原生验证。
+
+在专用 Xvfb 和私有 D-Bus 会话中运行完整程序：
+
+```bash
+pnpm build
+cargo build --locked --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
+dbus-run-session -- python3 tests/native/pdf_export.py --display :96 --html-only --artifacts test-results/native-html
+```
+
+脚本使用真实菜单、保存对话框和 Rust 后端导出 `.htm`，检查完整内容、内嵌图片、公式、代码高亮、
+静态图表及源文件未变。显示编号必须属于专用测试会话，环境准备见下文。
+共用导出窗口或 PDF 后端有修改时，同时运行下文原生 PDF 回归；不要用 HTML 成功推断 PDF 打印成功。
+相关 Rust 测试过滤器为 `document_export`。
+
 ## 原生 PDF 导出回归
 
 仅在修改 PDF 渲染、资源处理、页面参数、原生打印或导出文件写入时执行。

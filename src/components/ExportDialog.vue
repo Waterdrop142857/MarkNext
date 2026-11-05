@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { defaultPdfOptions, pageDimensions, paperSizes, validPdfOptions, type PdfOptions, type PdfSnapshot } from "../export/pdfOptions";
+import { defaultPdfOptions, pageDimensions, paperSizes, validPdfOptions, type PdfOptions } from "../export/pdfOptions";
+import type { ExportSnapshot } from "../export/types";
 import { exportPdf } from "../platform/tauri/pdfExport";
+import { exportHtml } from "../platform/tauri/htmlExport";
 import { t } from "../i18n";
 
-const props = defineProps<{ snapshot: PdfSnapshot }>();
+const props = defineProps<{ snapshot: ExportSnapshot; format: "pdf" | "html" }>();
 const emit = defineEmits<{ (event: "close"): void }>();
 const dialog = ref<HTMLDialogElement | null>(null);
 const options = ref<PdfOptions>({ ...defaultPdfOptions, margins: { ...defaultPdfOptions.margins } });
@@ -20,10 +22,11 @@ async function submit() {
   busy.value = true;
   error.value = "";
   try {
-    const done = await exportPdf({ ...props.snapshot, options: { ...options.value, margins: { ...options.value.margins } } });
+    const done = props.format === "html" ? await exportHtml(props.snapshot)
+      : await exportPdf({ ...props.snapshot, options: { ...options.value, margins: { ...options.value.margins } } });
     if (done) emit("close");
   }
-  catch (cause) { error.value = `${t("pdf.failed")} ${String(cause)}`; }
+  catch (cause) { error.value = `${t(props.format === "html" ? "html.failed" : "pdf.failed")} ${String(cause)}`; }
   finally { busy.value = false; }
 }
 onMounted(() => dialog.value?.showModal());
@@ -34,10 +37,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <dialog ref="dialog" class="pdf-dialog ui-controls" aria-labelledby="pdf-title" :aria-busy="busy" @cancel.prevent="close" @click.self="close" @contextmenu.stop>
+  <dialog ref="dialog" class="export-dialog ui-controls" aria-labelledby="export-title" :aria-busy="busy" @cancel.prevent="close" @click.self="close" @contextmenu.stop>
     <form @submit.prevent="submit">
-      <header><h1 id="pdf-title">{{ t('pdf.title') }}</h1><p>{{ snapshot.title }}</p></header>
-      <fieldset :disabled="busy" class="pdf-fields">
+      <header><h1 id="export-title">{{ t(format === 'html' ? 'html.title' : 'pdf.title') }}</h1><p>{{ snapshot.title }}</p></header>
+      <fieldset v-if="format === 'pdf'" :disabled="busy" class="pdf-fields">
         <legend>{{ t('pdf.pageSetup') }}</legend>
         <label>{{ t('pdf.paper') }}
           <select v-model="options.paper" autofocus>
@@ -53,22 +56,23 @@ onBeforeUnmount(() => {
           <label>{{ t('pdf.height') }} (mm)<input v-model.number="options.height" type="number" min="50" max="2000" step="0.1" required /></label>
         </template>
       </fieldset>
-      <fieldset :disabled="busy" class="pdf-fields">
+      <fieldset v-if="format === 'pdf'" :disabled="busy" class="pdf-fields">
         <legend>{{ t('pdf.margins') }} (mm)</legend>
         <label v-for="side in sides" :key="side">{{ t(`pdf.${side}`) }}<input v-model.number="options.margins[side]" type="number" min="0" max="2000" step="0.1" required /></label>
       </fieldset>
-      <p class="pdf-summary">{{ dimensions[0] }} × {{ dimensions[1] }} mm</p>
-      <p v-if="!valid" class="pdf-error" role="alert">{{ t('pdf.invalid') }}</p>
+      <p v-if="format === 'html'">{{ t('html.description') }}</p>
+      <p v-if="format === 'pdf'" class="pdf-summary">{{ dimensions[0] }} × {{ dimensions[1] }} mm</p>
+      <p v-if="format === 'pdf' && !valid" class="pdf-error" role="alert">{{ t('pdf.invalid') }}</p>
       <p v-if="error" class="pdf-error" role="alert">{{ error }}</p>
-      <p v-if="busy" role="status">{{ t('pdf.working') }}</p>
+      <p v-if="busy" role="status">{{ t(format === 'html' ? 'html.working' : 'pdf.working') }}</p>
       <footer><button type="button" :disabled="busy" @click="close">{{ t('common.cancel') }}</button><button type="submit" :disabled="busy || !valid">{{ t('pdf.export') }}</button></footer>
     </form>
   </dialog>
 </template>
 
 <style scoped>
-.pdf-dialog { width: 460px; max-width: calc(var(--app-viewport-width, 100vw) - 32px); max-height: calc(var(--app-viewport-height, 100vh) - 32px); box-sizing: border-box; margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--fluent-menu-border); border-radius: var(--fluent-menu-radius); background: var(--fluent-menu-bg); color: var(--fluent-menu-fg); box-shadow: var(--fluent-menu-shadow); font: var(--app-ui-font-size)/1.5 var(--app-ui-font-family); user-select: none; -webkit-user-select: none; }
-.pdf-dialog::backdrop { background: #0006; }
+.export-dialog { width: 460px; max-width: calc(var(--app-viewport-width, 100vw) - 32px); max-height: calc(var(--app-viewport-height, 100vh) - 32px); box-sizing: border-box; margin: auto; padding: 24px; overflow: auto; border: 1px solid var(--fluent-menu-border); border-radius: var(--fluent-menu-radius); background: var(--fluent-menu-bg); color: var(--fluent-menu-fg); box-shadow: var(--fluent-menu-shadow); font: var(--app-ui-font-size)/1.5 var(--app-ui-font-family); user-select: none; -webkit-user-select: none; }
+.export-dialog::backdrop { background: #0006; }
 h1 { margin: 0; font-size: 20px; }
 header p { margin: 4px 0 16px; overflow-wrap: anywhere; color: var(--app-footer-fg); }
 .pdf-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 12px 0; margin: 0; border: 0; }

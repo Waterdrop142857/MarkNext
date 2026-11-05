@@ -37,12 +37,12 @@
 
 ## 实现结构
 
-- `PdfExportDialog.vue`：页面设置、参数校验和结果反馈。
+- `ExportDialog.vue`：页面设置、参数校验和结果反馈。
 - `src/export/`：参数契约、HTML 整理和独立导出页面。
 - `src/platform/tauri/pdfExport.ts`：系统保存对话框及 IPC 适配。
-- `src-tauri/src/pdf_export/`：任务所有权、临时文件及各平台打印接口。
+- `src-tauri/src/document_export/`：任务所有权、临时文件及各平台打印接口。
 
-`pdf-export.html` 是独立构建入口，仅在导出时创建隐藏 WebView，不加载应用主界面或
+`document-export.html` 是独立构建入口，仅在导出时创建隐藏 WebView，不加载应用主界面或
 新建 Muya 实例。复用 MarkdownToHtml 渲染器，导出窗口具有独立的图表配置及 DOM；
 KaTeX 定位样式、纯 SVG 图表、代码样式和字体保留在打印页面中。
 原生页面设置统一管理纸张与边距，正文不再额外叠加 CSS 页边距或编辑器 padding。

@@ -1,6 +1,10 @@
 import type { MessageKey } from "./en";
 
 export const zhCN = {
+  "html.title": "导出 HTML…",
+  "html.description": "导出为单个 HTML 文件，内嵌样式、公式字体和本地图片。远程图片仍需联网加载。",
+  "html.working": "正在渲染并导出 HTML…",
+  "html.failed": "导出 HTML 失败：",
   "pdf.title": "导出 PDF…",
   "pdf.export": "导出",
   "pdf.pageSetup": "页面设置",

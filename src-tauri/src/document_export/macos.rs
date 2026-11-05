@@ -1,3 +1,4 @@
+use super::options::PdfOptions;
 use super::{complete, options::Orientation, Job};
 use objc2::runtime::ProtocolObject;
 use objc2_app_kit::{
@@ -6,7 +7,7 @@ use objc2_app_kit::{
 use objc2_foundation::{NSObjectProtocol, NSSize, NSString, NSURL};
 use objc2_web_kit::WKWebView;
 
-pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
+pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job, options: PdfOptions) {
     // with_webview runs on the main thread. Tauri owns this live WKWebView
     // for the whole print operation; no Objective-C reference escapes it.
     let result = unsafe {
@@ -19,7 +20,6 @@ pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
             return;
         }
         let info = NSPrintInfo::new();
-        let options = &job.payload.options;
         let (width, height) = options.paper_dimensions();
         let points = |millimeters: f64| millimeters * 72.0 / 25.4;
         info.setPaperSize(NSSize::new(points(width), points(height)));
@@ -37,7 +37,7 @@ pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
         info.setHorizontalPagination(NSPrintingPaginationMode::Fit);
         info.setVerticalPagination(NSPrintingPaginationMode::Automatic);
         info.setJobDisposition(NSPrintSaveJob);
-        let path = NSString::from_str(&job.temporary_pdf.to_string_lossy());
+        let path = NSString::from_str(&job.temporary_output.to_string_lossy());
         let url = NSURL::fileURLWithPath(&path);
         info.dictionary()
             .setObject_forKey(&url, ProtocolObject::from_ref(NSPrintJobSavingURL));
@@ -45,7 +45,7 @@ pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
         operation.setShowsPrintPanel(false);
         operation.setShowsProgressPanel(false);
         operation.setCanSpawnSeparateThread(false);
-        operation.setJobTitle(Some(&NSString::from_str(&job.payload.title)));
+        operation.setJobTitle(Some(&NSString::from_str(&job.payload.snapshot().title)));
         operation.runOperation()
     };
     complete(

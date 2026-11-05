@@ -68,7 +68,9 @@ const FONT_FACE_BLOCK_RE = /@font-face\s*\{[^}]*\}/g;
 const FAMILY_RE = /font-family:([^;]+);/;
 const WEIGHT_RE = /font-weight:([^;]+);/;
 const STYLE_RE = /font-style:([^;]+);/;
-const SRC_RE = /src:[^;]*;/;
+// Bundled small fonts may already be data URLs. Their internal semicolon is
+// part of url(...), rather than the end of the CSS declaration.
+const SRC_RE = /src:(?:[^;()]|\([^)]*\))*;/;
 const QUOTE_RE = /^["']|["']$/g;
 
 function descriptor(block: string, re: RegExp, fallback: string): string {
@@ -80,7 +82,9 @@ export function embedKatexFonts(css: string): string {
         const family = descriptor(block, FAMILY_RE, '');
         if (!family)
             return block;
-        const weight = descriptor(block, WEIGHT_RE, 'normal').toLowerCase();
+        const rawWeight = descriptor(block, WEIGHT_RE, 'normal').toLowerCase();
+        // Vite's production CSS minifier canonicalizes normal/bold to 400/700.
+        const weight = rawWeight === '400' ? 'normal' : rawWeight === '700' ? 'bold' : rawWeight;
         const style = descriptor(block, STYLE_RE, 'normal').toLowerCase();
 
         const dataUri = FACE_TO_DATA_URI[`${family}|${weight}|${style}`];

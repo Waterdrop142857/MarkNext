@@ -1,17 +1,18 @@
+use super::options::PdfOptions;
 use super::{complete, Job};
 use std::{cell::RefCell, rc::Rc};
 use webkit2gtk::PrintOperationExt;
 
-pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
+pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job, options: PdfOptions) {
     // Express orientation in the physical paper dimensions. GTK/WebKit's
     // landscape rotation can otherwise scale asymmetric margins differently
     // during page layout and drawing (verified with the native PDF regression).
-    let (width, height) = job.payload.options.page_dimensions();
+    let (width, height) = options.page_dimensions();
     let setup = gtk::PageSetup::new();
     let paper = gtk::PaperSize::new_custom("marknext", "MarkNext", width, height, gtk::Unit::Mm);
     setup.set_paper_size(&paper);
     setup.set_orientation(gtk::PageOrientation::Portrait);
-    let margins = &job.payload.options.margins;
+    let margins = &options.margins;
     setup.set_top_margin(margins.top, gtk::Unit::Mm);
     setup.set_right_margin(margins.right, gtk::Unit::Mm);
     setup.set_bottom_margin(margins.bottom, gtk::Unit::Mm);
@@ -23,7 +24,7 @@ pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
     // of the application's interface language. Never select a default printer.
     settings.set_printer(&gtk::glib::dgettext(Some("gtk30"), "Print to File"));
     settings.set("output-file-format", Some("pdf"));
-    let output = match tauri::Url::from_file_path(&job.temporary_pdf) {
+    let output = match tauri::Url::from_file_path(&job.temporary_output) {
         Ok(url) => url,
         Err(_) => {
             complete(&job.completion, Err("Invalid temporary PDF path".into()));

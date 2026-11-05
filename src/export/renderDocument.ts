@@ -1,13 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
 import { MarkdownToHtml } from "../muya/state/markdownToHtml";
 import { createDocumentImageResolver, resolveLocalImagePath } from "../services/documentImages";
 import DOMPurify from "dompurify";
-import { pageDimensions, type PdfPayload } from "./pdfOptions";
-import { preparePdfHtml } from "./prepareHtml";
+import { pageDimensions } from "./pdfOptions";
+import { prepareExportHtml } from "./prepareHtml";
 import printCss from "./pdfPrint.css?inline";
-import { loadPdfLanguages } from "./loadLanguages";
+import { loadExportLanguages } from "./loadLanguages";
+import type { RenderRequest } from "./types";
+import { embedImage } from "./embedImage";
 
-async function deadline<T>(task: Promise<T>, milliseconds: number, message: string): Promise<T> {
+export async function deadline<T>(task: Promise<T>, milliseconds: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([task, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(message)), milliseconds); })]);
@@ -15,18 +16,19 @@ async function deadline<T>(task: Promise<T>, milliseconds: number, message: stri
   finally { clearTimeout(timer); }
 }
 
-async function render() {
-  const payload = await invoke<PdfPayload>("pdf_export_payload");
+export async function renderExport(request: RenderRequest): Promise<Document> {
+  const payload = request.snapshot;
   const resolver = createDocumentImageResolver(() => payload.sourcePath);
   const authorizedImages = new Set<string>();
-  await loadPdfLanguages(payload.markdown);
+  await loadExportLanguages(payload.markdown);
   const renderer = new MarkdownToHtml(payload.markdown);
   const html = await renderer.generate({
+    title: payload.title,
     svgLabels: true,
     transformHtml: async html => {
       // A template is inert: relative images must not start loading against
       // the app URL before their source-document path has been authorized.
-      const template = preparePdfHtml(html);
+      const template = prepareExportHtml(html);
       await Promise.all(Array.from(template.content.querySelectorAll("img[src]")).map(async image => {
         const source = image.getAttribute("src")!;
         const local = resolveLocalImagePath(source, payload.sourcePath);
@@ -36,13 +38,14 @@ async function render() {
         if (!url) throw new Error(`Cannot resolve image: ${source}`);
         await resolver.prepare(url);
         authorizedImages.add(url);
-        image.setAttribute("src", url);
+        image.setAttribute("src", request.format === "html" ? await embedImage(url) : url);
       }));
       return template.innerHTML;
     },
   });
   const parsed = new DOMParser().parseFromString(html, "text/html");
-  for (const style of parsed.head.querySelectorAll("style")) document.head.appendChild(style);
+  // Keep the generated head intact for standalone HTML serialization.
+  for (const style of parsed.head.querySelectorAll("style")) document.head.appendChild(style.cloneNode(true));
   const purifier = DOMPurify(window);
   purifier.addHook("uponSanitizeAttribute", (node, attribute) => {
     // DOMPurify normally rejects the native asset: scheme. Keep only image
@@ -60,33 +63,33 @@ async function render() {
   document.body.innerHTML = body;
   for (const image of document.images) image.loading = "eager";
   document.title = payload.title;
-  const [width, height] = pageDimensions(payload.options);
-  const style = document.createElement("style");
-  // Native page setup owns the margins. Do not also add @page margins or
-  // editor padding, which would shrink the printable area a second time.
-  style.textContent = printCss;
-  const variables = document.documentElement.style;
-  variables.setProperty("--pdf-font-size", `${payload.fontSize}px`);
-  variables.setProperty("--pdf-content-width", `${width - payload.options.margins.left - payload.options.margins.right}mm`);
-  variables.setProperty("--pdf-content-height", `${height - payload.options.margins.top - payload.options.margins.bottom}mm`);
-  document.head.appendChild(style);
+  if (request.format === "pdf") {
+    const { options } = request;
+    const [width, height] = pageDimensions(options);
+    const style = document.createElement("style");
+    // Native page setup owns margins; do not apply a second CSS margin.
+    style.textContent = printCss;
+    const variables = document.documentElement.style;
+    variables.setProperty("--pdf-font-size", `${payload.fontSize}px`);
+    variables.setProperty("--pdf-content-width", `${width - options.margins.left - options.margins.right}mm`);
+    variables.setProperty("--pdf-content-height", `${height - options.margins.top - options.margins.bottom}mm`);
+    document.head.appendChild(style);
+  }
   const article = document.querySelector<HTMLElement>(".markdown-body");
-  if (!article) throw new Error("PDF document was not rendered");
+  if (!article) throw new Error("Export document was not rendered");
   article.style.fontFamily = payload.fontFamily;
+  article.style.fontSize = `${payload.fontSize}px`;
   for (const code of article.querySelectorAll<HTMLElement>("pre,code")) code.style.fontFamily = payload.codeFontFamily;
   if (Array.from(article.querySelectorAll(".mermaid,.vega-lite,.flowchart,.sequence,.plantuml"))
     .some(node => node.textContent?.trim() === "< Invalid Diagram >")) throw new Error("A diagram could not be rendered");
   await deadline(Promise.all([
     document.fonts.ready,
     ...Array.from(document.images).map(image => image.decode().catch(() => { throw new Error(`Image failed to load: ${image.getAttribute("src")}`); })),
-  ]), 30000, "Timed out waiting for PDF fonts or images");
+  ]), 30000, "Timed out waiting for export fonts or images");
   // A hidden native WebView can suspend animation frames. Force layout and
   // yield a task instead of waiting for a frame that might never be scheduled.
   article.getBoundingClientRect();
   await new Promise<void>(resolve => setTimeout(resolve, 0));
-  await invoke("pdf_export_ready", { error: null });
+  parsed.body.innerHTML = document.body.innerHTML;
+  return parsed;
 }
-void deadline(render(), 90000, "PDF rendering timed out").catch(async error => {
-  try { await invoke("pdf_export_ready", { error: String(error) }); }
-  catch (cause) { console.error("PDF export failed", cause); }
-});

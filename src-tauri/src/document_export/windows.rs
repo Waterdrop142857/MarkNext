@@ -1,3 +1,4 @@
+use super::options::PdfOptions;
 use super::{complete, options::Orientation, Job};
 use webview2_com::{
     Microsoft::Web::WebView2::Win32::{
@@ -8,20 +9,23 @@ use webview2_com::{
 };
 use windows::core::{Interface, HSTRING};
 
-pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job) {
+pub(super) fn print(view: tauri::webview::PlatformWebview, job: Job, options: PdfOptions) {
     // Tauri invokes this closure on the owning UI/COM thread. The WebView2
     // interfaces and settings stay local to it; only completion crosses threads.
-    let result = unsafe { start(view, &job) };
+    let result = unsafe { start(view, &job, &options) };
     if let Err(error) = result {
         complete(&job.completion, Err(error.to_string()));
     }
 }
 
-unsafe fn start(view: tauri::webview::PlatformWebview, job: &Job) -> windows::core::Result<()> {
+unsafe fn start(
+    view: tauri::webview::PlatformWebview,
+    job: &Job,
+    options: &PdfOptions,
+) -> windows::core::Result<()> {
     let engine: ICoreWebView2_7 = view.controller().CoreWebView2()?.cast()?;
     let environment: ICoreWebView2Environment6 = view.environment().cast()?;
     let settings = environment.CreatePrintSettings()?;
-    let options = &job.payload.options;
     let (width, height) = options.paper_dimensions();
     settings.SetPageWidth(width / 25.4)?;
     settings.SetPageHeight(height / 25.4)?;
@@ -50,7 +54,7 @@ unsafe fn start(view: tauri::webview::PlatformWebview, job: &Job) -> windows::co
         Ok(())
     }));
     engine.PrintToPdf(
-        &HSTRING::from(job.temporary_pdf.as_os_str()),
+        &HSTRING::from(job.temporary_output.as_os_str()),
         &settings,
         &handler,
     )

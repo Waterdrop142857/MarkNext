@@ -1,3 +1,5 @@
+import type { ExportSnapshot } from "./types";
+
 export const paperSizes = {
   a4: [210, 297], a5: [148, 210], b5: [176, 250], letter: [215.9, 279.4],
 } as const;
@@ -9,15 +11,7 @@ export interface PdfOptions {
   orientation: "portrait" | "landscape";
   margins: { top: number; right: number; bottom: number; left: number };
 }
-export interface PdfSnapshot {
-  readonly markdown: string;
-  readonly title: string;
-  readonly sourcePath: string | null;
-  readonly fontFamily: string;
-  readonly codeFontFamily: string;
-  readonly fontSize: number;
-}
-export interface PdfPayload extends PdfSnapshot { readonly options: PdfOptions }
+export interface PdfPayload extends ExportSnapshot { readonly options: PdfOptions }
 export const defaultPdfOptions: Readonly<PdfOptions> = {
   paper: "a4", width: 210, height: 297, orientation: "portrait",
   margins: { top: 20, right: 20, bottom: 20, left: 20 },

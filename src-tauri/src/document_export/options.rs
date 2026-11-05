@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum Paper {
+pub(crate) enum Paper {
     A4,
     A5,
     B5,
@@ -11,13 +11,13 @@ pub(super) enum Paper {
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
-pub(super) enum Orientation {
+pub(crate) enum Orientation {
     Portrait,
     Landscape,
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Margins {
+pub(crate) struct Margins {
     pub top: f64,
     pub right: f64,
     pub bottom: f64,
@@ -25,7 +25,7 @@ pub(super) struct Margins {
 }
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct PdfOptions {
+pub(crate) struct PdfOptions {
     pub paper: Paper,
     pub width: f64,
     pub height: f64,

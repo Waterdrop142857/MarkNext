@@ -1,6 +1,7 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import type { RecoverySnapshot } from "../../src/document/types";
+import type { ExportSnapshot } from "../../src/export/types";
 import type { PdfPayload } from "../../src/export/pdfOptions";
 
 // Test-only entry point. The production bundle starts from index.html and
@@ -19,6 +20,8 @@ export interface NativeFixture {
   openedUrls: string[];
   failOpenUrl: boolean;
   pdfExports: { path: string; payload: PdfPayload }[];
+  htmlExports: { path: string; payload: ExportSnapshot }[];
+  htmlError: string | null;
   pdfError: string | null;
   cancelSave: boolean;
   disk: Record<string, string>;
@@ -43,7 +46,7 @@ let completeRead: (() => void) | null = null;
 const fixture: NativeFixture = {
   openPath: "/old.md", disk: JSON.parse(localStorage.getItem("test-disk") ?? '{"/old.md":"original","/new.md":"replacement"}'),
   savePath: "/saved.md", allowedImages: [], openedUrls: [], failOpenUrl: false, pathAliases: {}, notifications: [],
-  pdfExports: [], pdfError: null, cancelSave: false,
+  htmlExports: [], htmlError: null, pdfExports: [], pdfError: null, cancelSave: false,
   openRequests: JSON.parse(localStorage.getItem("test-open-requests") ?? "[]"), openRequestAcks: [], startupReady: [],
   async deliverFiles(paths) {
     const id = Math.max(0, ...fixture.openRequests.map(request => request.id), ...fixture.openRequestAcks) + 1;
@@ -93,6 +96,11 @@ mockIPC((command, args) => {
     return fixture.pathAliases[path] ?? `/${normalized.join("/")}`;
   }
   if (command === "allow_image_file") { fixture.allowedImages.push(String(payload.path)); return; }
+  if (command === "export_html") {
+    if (fixture.htmlError) throw new Error(fixture.htmlError);
+    fixture.htmlExports.push(structuredClone(payload) as { path: string; payload: ExportSnapshot });
+    return;
+  }
   if (command === "export_pdf") {
     if (fixture.pdfError) throw new Error(fixture.pdfError);
     fixture.pdfExports.push(structuredClone(payload) as { path: string; payload: PdfPayload });

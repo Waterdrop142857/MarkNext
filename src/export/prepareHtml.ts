@@ -2,7 +2,7 @@ import DOMPurify from "dompurify";
 import { sanitizePreviewStyle } from "../muya/utils/sanitizeHtmlPreview";
 
 /** Keep KaTeX's inline geometry while containing user HTML presentation. */
-export function preparePdfHtml(html: string): HTMLTemplateElement {
+export function prepareExportHtml(html: string): HTMLTemplateElement {
   const template = document.createElement("template");
   template.innerHTML = DOMPurify.sanitize(html, {
     FORBID_TAGS: ["style", "link", "base", "meta", "iframe", "object", "embed", "form"],

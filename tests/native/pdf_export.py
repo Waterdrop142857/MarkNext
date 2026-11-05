@@ -5,6 +5,7 @@ dialogs and keyboard input; PDF dimensions/content are inspected with Poppler.
 """
 import argparse
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -97,6 +98,34 @@ StartNode --> EndNode
                 wait(lambda: bool(command("xdotool", "search", "--onlyvisible", "--name", "^MarkNext$")))
                 time.sleep(3)  # Real editor/module warmup, not a replacement for PDF assertions.
                 screenshot("editor")
+                if args.html_only:
+                    command("xdotool", "mousemove", "24", "66", "click", "1")
+                    time.sleep(.15)
+                    command("xdotool", "mousemove", "70", "325", "click", "1")
+                    time.sleep(.4)
+                    screenshot("html-settings")
+                    keys("Tab", "Return")  # HTML dialog focuses Cancel first.
+                    time.sleep(.8)
+                    output = artifacts / "portable.htm"
+                    output.unlink(missing_ok=True)
+                    keys("ctrl+a")
+                    type_text(output)
+                    keys("Return")
+                    wait(lambda: output.is_file(), 100)
+                    html = output.read_text()
+                    assert html.startswith("<!DOCTYPE html>")
+                    for token in ["中文正文", "StartNode", "EndNode", "answer", "TABLE_PROOF_34", "PARAGRAPH_064", "END_OF_DOCUMENT_PROOF", 'class="katex', 'class="token keyword"', "data:image/svg+xml;base64,", "Content-Security-Policy"]:
+                        assert token in html, f"Missing HTML content: {token}"
+                    assert "<script" not in html.lower()
+                    assert "asset://" not in html
+                    fonts = re.findall(r"@font-face\s*\{[^}]*\}", html)
+                    assert len(fonts) == 20
+                    assert all(re.search(r"src:\s*url\(data:font/woff2;base64,", face) for face in fonts)
+                    assert all(face.count("base64,") == 1 and 'format("truetype")' not in face for face in fonts)
+                    assert source.read_text() == markdown
+                    screenshot("html-done")
+                    print("PASS HTML: portable file with embedded image, formulas, highlighted code, diagram and complete source", flush=True)
+                    return
                 cases = [
                     ("a4", 0, False, None, (20, 20, 20, 20), (210, 297)),
                     ("b5-landscape", 2, True, None, (12, 18, 10, 30), (250, 176)),
@@ -195,4 +224,5 @@ if __name__ == "__main__":
     parser.add_argument("--artifacts", default="test-results/native-pdf")
     parser.add_argument("--locale", default="en_US.UTF-8")
     parser.add_argument("--only-empty", action="store_true")
+    parser.add_argument("--html-only", action="store_true", help="Export and verify one standalone HTML file instead of PDF cases")
     run(parser.parse_args())

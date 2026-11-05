@@ -1,4 +1,8 @@
 export const en = {
+  "html.title": "Export HTML…",
+  "html.description": "Export a single HTML file with embedded styles, math fonts and local images. Remote images still require a network connection.",
+  "html.working": "Rendering and exporting HTML…",
+  "html.failed": "HTML export failed:",
   "pdf.title": "Export PDF…",
   "pdf.export": "Export",
   "pdf.pageSetup": "Page setup",

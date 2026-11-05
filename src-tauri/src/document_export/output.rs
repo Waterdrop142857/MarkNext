@@ -16,10 +16,10 @@ fn state(path: &Path) -> io::Result<TargetState> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             let parent = path
                 .parent()
-                .ok_or_else(|| io::Error::other("Invalid PDF directory"))?;
+                .ok_or_else(|| io::Error::other("Invalid export directory"))?;
             fs::canonicalize(parent)?.join(
                 path.file_name()
-                    .ok_or_else(|| io::Error::other("Invalid PDF filename"))?,
+                    .ok_or_else(|| io::Error::other("Invalid export filename"))?,
             )
         }
         Err(error) => return Err(error),
@@ -42,7 +42,7 @@ impl OutputTarget {
         if source.and_then(|path| fs::canonicalize(path).ok()).as_ref() == Some(&expected.resolved)
         {
             return Err(io::Error::other(
-                "The PDF must not replace the source document",
+                "The export must not replace the source document",
             ));
         }
         Ok(Self { path, expected })
@@ -51,7 +51,7 @@ impl OutputTarget {
         crate::document::guarded_atomic_write(&self.path, bytes, || {
             if state(&self.path)? != self.expected {
                 return Err(io::Error::other(
-                    "The PDF destination changed while exporting. Choose the destination again.",
+                    "The export destination changed while exporting. Choose the destination again.",
                 ));
             }
             Ok(())
@@ -62,7 +62,7 @@ impl OutputTarget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pdf_export::{TemporaryExport, SEQUENCE};
+    use crate::document_export::{TemporaryExport, SEQUENCE};
     use std::sync::atomic::Ordering;
     fn directory() -> TemporaryExport {
         TemporaryExport::new(&format!(
