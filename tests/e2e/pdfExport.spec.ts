@@ -22,6 +22,9 @@ for (const language of ["en", "zh-CN"] as const) {
     await command.click();
     const dialog = page.getByRole("dialog", { name: english ? "Export PDF…" : "导出 PDF…" });
     await expect(dialog).toBeVisible();
+    const avoidBreaks = dialog.getByRole("checkbox", { name: english ? "Avoid awkward page breaks" : "避免破页", exact: true });
+    await expect(avoidBreaks).not.toBeChecked();
+    await avoidBreaks.check();
     await page.keyboard.press("Control+N");
     await expect(page.locator(".document-tab")).toHaveCount(1);
     const paper = dialog.getByLabel(english ? "Paper size" : "纸张大小");
@@ -50,7 +53,7 @@ for (const language of ["en", "zh-CN"] as const) {
     expect(requests[0].path).toBe("/export.pdf");
     expect(requests[0].payload).toMatchObject({
       markdown: "original unsaved", sourcePath: "/old.md", title: "old.md",
-      options: { paper: "custom", width: 120, height: 180, orientation: "landscape", margins: { top: 10, bottom: 20, left: 20, right: 20 } },
+      options: { paper: "custom", width: 120, height: 180, orientation: "landscape", avoidPageBreaks: true, margins: { top: 10, bottom: 20, left: 20, right: 20 } },
     });
     expect(await page.evaluate(() => window.nativeFixture.writes)).toEqual([]);
     expect(await page.evaluate(() => window.nativeFixture.disk["/old.md"])).toBe("original");

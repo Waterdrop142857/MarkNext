@@ -239,6 +239,14 @@ dbus-run-session -- python3 tests/native/pdf_export.py --display :96 --html-only
 ## 原生 PDF 导出回归
 
 仅在修改 PDF 渲染、资源处理、页面参数、原生打印或导出文件写入时执行。
+
+标题和正文分离的专项回归：在同样的隔离会话条件下添加 `--pagination`，例如
+`dbus-run-session -- python3 tests/native/pdf_export.py --display :96 --pagination --artifacts test-results/native-pagination`。
+该夹具覆盖一至六级标题、24 个短段落、短代码块，以及必须跨页的长段落。
+从实际 PDF 的文字页面映射检查标题和短正文同页、短段落/代码块不拆开，并检查长段落全部 70 行保留。
+脚本会在设置窗口中显式勾选“避免破页”；同时传入 `--natural-pagination` 可验证默认关闭时的自然分页，
+产物目录应分开。开启与关闭都应检查正文完整，关闭状态不应偷偷应用同页组合。
+测试应同时保留修复前失败与修复后通过的产物；仅通过浏览器 DOM 分组检查不算原生分页验收。
 Linux 需要 GTK 3 的 Python GI 绑定、`xdotool`、Xvfb、`dbus-run-session` 及 Poppler
 的 `pdftotext` / `pdftoppm`。先在独立终端保持开发前端运行并构建调试版：
 

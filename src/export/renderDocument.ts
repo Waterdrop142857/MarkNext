@@ -7,6 +7,7 @@ import printCss from "./pdfPrint.css?inline";
 import { loadExportLanguages } from "./loadLanguages";
 import type { RenderRequest } from "./types";
 import { embedImage } from "./embedImage";
+import { preparePdfPagination } from "./preparePagination";
 
 export async function deadline<T>(task: Promise<T>, milliseconds: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -89,6 +90,11 @@ export async function renderExport(request: RenderRequest): Promise<Document> {
   // A hidden native WebView can suspend animation frames. Force layout and
   // yield a task instead of waiting for a frame that might never be scheduled.
   article.getBoundingClientRect();
+  if (request.format === "pdf" && request.options.avoidPageBreaks) {
+    const height = pageDimensions(request.options)[1] - request.options.margins.top - request.options.margins.bottom;
+    article.classList.add("pdf-avoid-breaks");
+    preparePdfPagination(article, height * 96 / 25.4);
+  }
   await new Promise<void>(resolve => setTimeout(resolve, 0));
   parsed.body.innerHTML = document.body.innerHTML;
   return parsed;

@@ -72,6 +72,7 @@ test("HTML worker produces a portable document with embedded resources and safe 
   const fonts = output.html.match(/@font-face\s*\{[^}]*\}/g) ?? [];
   expect(fonts).toHaveLength(20);
   for (const font of fonts) expect(font).toMatch(/src:\s*url\(data:font\/woff2;base64,/);
+  expect(output.html).not.toContain("pdf-keep-together");
   expect(output.html).not.toContain("asset://");
   expect(output.html).not.toContain("onclick=");
 });
@@ -81,4 +82,27 @@ test("HTML worker reports resource failures instead of exporting incomplete cont
   await page.goto("/tests/e2e/html-worker.html?bad-image");
   await expect.poll(() => page.evaluate(() => window.htmlWorker.error)).toContain("Unsupported image");
   expect(await page.evaluate(() => window.htmlWorker.result)).toBe("");
+});
+
+
+test("PDF rendering groups a heading with short content while keeping oversized paragraphs fragmentable", async ({ page }) => {
+  await page.goto("/tests/e2e/html-worker.html?pdf&avoid-breaks");
+  await expect.poll(() => page.evaluate(() => window.htmlWorker.ready)).toBe(true);
+  expect(await page.evaluate(() => window.htmlWorker.error)).toBe("");
+  const title = page.locator("h1");
+  await expect(title.locator("..")).toHaveClass("pdf-keep-together");
+  await expect(title.locator("..").locator("p")).toContainText("x");
+  const long = page.locator("p").filter({ hasText: "LONG_START" });
+  await expect(long).toHaveAttribute("data-pdf-break", "split");
+  expect(await long.evaluate(node => getComputedStyle(node).breakInside)).toBe("auto");
+  await expect(long).toContainText("LONG_END");
+});
+
+test("PDF rendering leaves natural pagination intact when break prevention is disabled", async ({ page }) => {
+  await page.goto("/tests/e2e/html-worker.html?pdf");
+  await expect.poll(() => page.evaluate(() => window.htmlWorker.ready)).toBe(true);
+  expect(await page.evaluate(() => window.htmlWorker.error)).toBe("");
+  await expect(page.locator(".pdf-avoid-breaks,.pdf-keep-together,[data-pdf-break]")).toHaveCount(0);
+  expect(await page.locator("h1").evaluate(node => getComputedStyle(node).breakAfter)).toBe("auto");
+  await expect(page.locator(".markdown-body")).toContainText("LONG_END");
 });

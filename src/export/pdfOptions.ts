@@ -9,11 +9,13 @@ export interface PdfOptions {
   width: number;
   height: number;
   orientation: "portrait" | "landscape";
+  avoidPageBreaks: boolean;
   margins: { top: number; right: number; bottom: number; left: number };
 }
 export interface PdfPayload extends ExportSnapshot { readonly options: PdfOptions }
 export const defaultPdfOptions: Readonly<PdfOptions> = {
   paper: "a4", width: 210, height: 297, orientation: "portrait",
+  avoidPageBreaks: false,
   margins: { top: 20, right: 20, bottom: 20, left: 20 },
 };
 export function pageDimensions(options: PdfOptions): readonly [number, number] {
@@ -22,7 +24,8 @@ export function pageDimensions(options: PdfOptions): readonly [number, number] {
 }
 export function validPdfOptions(options: PdfOptions): boolean {
   if (!(options.paper === "custom" || Object.prototype.hasOwnProperty.call(paperSizes, options.paper))
-    || !["portrait", "landscape"].includes(options.orientation)) return false;
+    || !["portrait", "landscape"].includes(options.orientation)
+    || typeof options.avoidPageBreaks !== "boolean") return false;
   const dimensions = pageDimensions(options);
   const margins = Object.values(options.margins);
   return dimensions.every(value => Number.isFinite(value) && value >= 50 && value <= 2000)

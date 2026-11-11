@@ -62,6 +62,9 @@ StartNode --> EndNode
 """ + "".join(f"| Row {n} | TABLE_PROOF_{n} |\n" for n in range(35)) + "\n" + "\n\n".join(
             f"PARAGRAPH_{n:03d} " + "A stable native PDF export keeps the complete document. " * 4 for n in range(65)
         ) + "\n\nEND_OF_DOCUMENT_PROOF\n"
+        if args.pagination:
+            from pdf_pagination import markdown as pagination_markdown
+            markdown = pagination_markdown()
         source.write_text(markdown)
 
         def command(*values):
@@ -133,6 +136,8 @@ StartNode --> EndNode
                 ]
                 if args.only_empty:
                     cases = []
+                if args.pagination:
+                    cases = cases[:1]
                 for name, paper, landscape, custom, margins, size in cases:
                     command("xdotool", "mousemove", "24", "66", "click", "1")
                     time.sleep(.15)
@@ -149,8 +154,10 @@ StartNode --> EndNode
                         keys("ctrl+a")
                         type_text(value)
                         keys("Tab")
+                    if args.pagination and not args.natural_pagination:
+                        keys("space")  # Explicitly enable the optional cohesion setting.
                     screenshot(f"{name}-settings")
-                    keys("Tab", "Return")  # Cancel -> Export.
+                    keys("Tab", "Tab", "Return")  # Checkbox -> Cancel -> Export.
                     time.sleep(.8)
                     output = artifacts / f"{name}.pdf"
                     output.unlink(missing_ok=True)
@@ -179,11 +186,19 @@ StartNode --> EndNode
                     # Some CJK fonts map shared glyphs to compatibility radical
                     # code points in the PDF. Compare Unicode-normalized text.
                     text = unicodedata.normalize("NFKC", text)
-                    for token in ["中文正文", "StartNode", "EndNode", "answer", "TABLE_PROOF_34", "PARAGRAPH_064", "END_OF_DOCUMENT_PROOF"]:
+                    for token in (["END_OF_DOCUMENT_PROOF"] if args.pagination else ["中文正文", "StartNode", "EndNode", "answer", "TABLE_PROOF_34", "PARAGRAPH_064", "END_OF_DOCUMENT_PROOF"]):
                         assert token in text, f"Missing PDF content: {token}"
                     subprocess.run(["pdftoppm", "-f", "1", "-singlefile", "-scale-to", "1000", "-png", str(output), str(artifacts / name)], check=True, timeout=20)
                     screenshot(f"{name}-done")
                     print(f"PASS {name}: {len(pages)} pages, size={size} mm, margins={margins} mm, full content and diagrams", flush=True)
+                    if args.pagination:
+                        from pdf_pagination import inspect
+                        problems = inspect(pages)
+                        (artifacts / "pagination.txt").write_text("\n".join(problems) or "No pagination defects")
+                        if args.natural_pagination:
+                            assert problems, "Expected this boundary fixture to use natural page breaks when disabled"
+                        else:
+                            assert not problems, "\n".join(problems)
                     time.sleep(.3)
                 assert source.read_text() == markdown, "Export must never modify the source document"
                 # An empty, never-saved tab must produce a blank PDF without
@@ -194,7 +209,7 @@ StartNode --> EndNode
                 time.sleep(.15)
                 command("xdotool", "mousemove", "70", "289", "click", "1")
                 time.sleep(.4)
-                keys(*("Tab" for _ in range(7)), "Return")
+                keys(*("Tab" for _ in range(8)), "Return")
                 time.sleep(.8)
                 output = artifacts / "empty.pdf"
                 output.unlink(missing_ok=True)
@@ -224,5 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("--artifacts", default="test-results/native-pdf")
     parser.add_argument("--locale", default="en_US.UTF-8")
     parser.add_argument("--only-empty", action="store_true")
+    parser.add_argument("--pagination", action="store_true", help="Verify heading/paragraph cohesion and oversized paragraph flow")
+    parser.add_argument("--natural-pagination", action="store_true", help="With --pagination, leave break prevention disabled and verify the natural boundary behavior")
     parser.add_argument("--html-only", action="store_true", help="Export and verify one standalone HTML file instead of PDF cases")
     run(parser.parse_args())

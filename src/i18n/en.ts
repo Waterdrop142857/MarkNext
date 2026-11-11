@@ -14,6 +14,8 @@ export const en = {
   "pdf.width": "Width",
   "pdf.height": "Height",
   "pdf.margins": "Margins",
+  "pdf.avoidPageBreaks": "Avoid awkward page breaks",
+  "pdf.avoidPageBreaksHint": "Keep headings with short content where possible. May leave more space at page ends.",
   "pdf.top": "Top",
   "pdf.bottom": "Bottom",
   "pdf.left": "Left",

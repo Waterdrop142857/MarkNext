@@ -30,6 +30,8 @@ pub(crate) struct PdfOptions {
     pub width: f64,
     pub height: f64,
     pub orientation: Orientation,
+    #[serde(default, rename = "avoidPageBreaks")]
+    pub avoid_page_breaks: bool,
     pub margins: Margins,
 }
 impl PdfOptions {
@@ -76,6 +78,7 @@ mod tests {
             width: 210.0,
             height: 297.0,
             orientation: Orientation::Portrait,
+            avoid_page_breaks: false,
             margins: Margins {
                 top: 20.0,
                 right: 20.0,

@@ -16,6 +16,8 @@ export const zhCN = {
   "pdf.width": "宽度",
   "pdf.height": "高度",
   "pdf.margins": "页边距",
+  "pdf.avoidPageBreaks": "避免破页",
+  "pdf.avoidPageBreaksHint": "尽量保持标题与短正文同页，可能增加页尾留白。",
   "pdf.top": "上",
   "pdf.bottom": "下",
   "pdf.left": "左",

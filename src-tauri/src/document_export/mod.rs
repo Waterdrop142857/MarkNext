@@ -393,9 +393,17 @@ mod tests {
             "paper": "a4", "width": 210, "height": 297, "orientation": "portrait",
             "margins": { "top": 20, "right": 20, "bottom": 20, "left": 20 }
         });
-        let pdf: PdfPayload = serde_json::from_value(pdf).unwrap();
+        let mut pdf: PdfPayload = serde_json::from_value(pdf).unwrap();
         assert_eq!(pdf.snapshot.markdown, "# unsaved");
         assert!(pdf.options.validate().is_ok());
+        assert!(!pdf.options.avoid_page_breaks);
+        pdf.options.avoid_page_breaks = true;
+        let request = serde_json::to_value(RenderRequest::Pdf {
+            snapshot: pdf.snapshot,
+            options: pdf.options,
+        })
+        .unwrap();
+        assert_eq!(request["options"]["avoidPageBreaks"], true);
     }
     #[test]
     fn pdf_export_navigation_accepts_the_local_shell_in_dev_and_packaged_apps() {

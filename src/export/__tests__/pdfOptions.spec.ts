@@ -3,6 +3,14 @@ import { defaultPdfOptions, pageDimensions, validPdfOptions, type PdfOptions } f
 
 function options(): PdfOptions { return { ...defaultPdfOptions, margins: { ...defaultPdfOptions.margins } }; }
 describe("PDF page geometry", () => {
+  it("makes break prevention opt-in and rejects nonboolean flags", () => {
+    const page = options();
+    expect(page.avoidPageBreaks).toBe(false);
+    page.avoidPageBreaks = true;
+    expect(validPdfOptions(page)).toBe(true);
+    Reflect.set(page, "avoidPageBreaks", "true");
+    expect(validPdfOptions(page)).toBe(false);
+  });
   it("uses ISO paper dimensions and changes the printable area with orientation", () => {
     const page = options();
     expect(pageDimensions(page)).toEqual([210, 297]);

@@ -60,6 +60,10 @@ onBeforeUnmount(() => {
         <legend>{{ t('pdf.margins') }} (mm)</legend>
         <label v-for="side in sides" :key="side">{{ t(`pdf.${side}`) }}<input v-model.number="options.margins[side]" type="number" min="0" max="2000" step="0.1" required /></label>
       </fieldset>
+      <template v-if="format === 'pdf'">
+        <label class="pdf-pagination"><input v-model="options.avoidPageBreaks" type="checkbox" :disabled="busy" aria-describedby="pdf-pagination-hint" /><span>{{ t('pdf.avoidPageBreaks') }}</span></label>
+        <p id="pdf-pagination-hint" class="pdf-hint">{{ t('pdf.avoidPageBreaksHint') }}</p>
+      </template>
       <p v-if="format === 'html'">{{ t('html.description') }}</p>
       <p v-if="format === 'pdf'" class="pdf-summary">{{ dimensions[0] }} × {{ dimensions[1] }} mm</p>
       <p v-if="format === 'pdf' && !valid" class="pdf-error" role="alert">{{ t('pdf.invalid') }}</p>
@@ -81,6 +85,9 @@ label { display: flex; flex-direction: column; gap: 6px; }
 input, select, button { border: 1px solid var(--fluent-menu-border); border-radius: 4px; background-color: var(--app-menubar-bg); color: inherit; }
 input, select { width: 100%; }
 input { user-select: text; -webkit-user-select: text; }
+label.pdf-pagination { flex-direction: row; align-items: center; gap: 8px; margin-top: 8px; }
+.pdf-pagination input { flex: none; width: 16px; height: 16px; min-height: 0; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+.pdf-hint { margin: 4px 0 8px; font-size: .875em; color: var(--app-footer-fg); }
 button { padding-inline: 18px; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
 button:hover:not(:disabled) { background-color: var(--fluent-menu-item-hover); }
