@@ -3,7 +3,7 @@ import type { IIndexPosition } from '../selection/offsetCursor';
 import type { IHistorySelection, ISelection } from '../selection/types';
 import type { TState } from '../state/types';
 import { CLASS_NAMES } from '../config';
-import { findContentDOM, getOffsetOfParagraph, getTextContent } from '../selection/dom';
+import { findContentDOM, getOffsetOfParagraph } from '../selection/dom';
 import { injectStateSentinels, locateSentinelOffsets } from '../selection/offsetCursor';
 import { SelectionCaretType, SelectionDirection } from '../selection/types';
 import { getUniqueId } from '../utils';
@@ -38,9 +38,7 @@ function dropOffset(muya: Muya, event: DragEvent): number | null {
     if (element?.closest(`[contenteditable="false"], .${CLASS_NAMES.MU_MATH_RENDER}, .${CLASS_NAMES.MU_RUBY_RENDER}, .${CLASS_NAMES.MU_IMAGE_CONTAINER}`)) return null;
     const block = getBlock(content);
     if (!block?.isContent() || block.path.at(-1) !== 'text') return null;
-    const localOffset = node.nodeType === Node.TEXT_NODE ? nodeOffset
-        : Array.from(node.childNodes).slice(0, nodeOffset).reduce((sum, child) => sum + getTextContent(child, [CLASS_NAMES.MU_MATH_RENDER, CLASS_NAMES.MU_RUBY_RENDER]).length, 0);
-    const offset = getOffsetOfParagraph(node, content) + localOffset;
+    const offset = getOffsetOfParagraph(node, content, nodeOffset);
     if (offset < 0 || offset > block.text.length) return null;
     const endpoint = { block, path: [...block.path], offset };
     const selection: ISelection = {

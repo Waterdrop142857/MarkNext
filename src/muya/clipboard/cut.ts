@@ -5,7 +5,6 @@ import type Table from '../block/gfm/table';
 import type TableBodyCell from '../block/gfm/table/cell';
 import type { Nullable } from '../types';
 import type Clipboard from './index';
-import Format from '../block/base/format';
 import { ScrollPage } from '../block/scrollPage';
 import { CLASS_NAMES } from '../config';
 import { SelectionDirection, SelectionType } from '../selection/types';
@@ -60,8 +59,7 @@ function resetToEmptyParagraph(clipboard: Clipboard): void {
 // add or remove a block-leading marker (`# `, `- `, …).
 function setCursorAndConvert(block: Content, offset: number): void {
     block.setCursor(offset, offset, true);
-    if (block instanceof Format)
-        block.checkInlineUpdate();
+    block.checkInlineUpdate();
 }
 
 // Collapse the document to a single empty paragraph once a cut empties it.

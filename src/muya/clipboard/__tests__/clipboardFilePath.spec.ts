@@ -60,7 +60,12 @@ function makeClipboard(
     options: Record<string, unknown>,
     anchorBlock: Content,
 ) {
-    const clipboard = new Clipboard({ options, trackTask: <T>(task: () => Promise<T>) => task() } as unknown as Muya);
+    const clipboard = new Clipboard({
+        options,
+        trackTask: <T>(task: () => Promise<T>) => task(),
+        flush: vi.fn(),
+        editor: { history: { breakGroup: vi.fn() } },
+    } as unknown as Muya);
     Object.defineProperty(clipboard, 'selection', {
         get: () => ({
             getSelection: () => ({

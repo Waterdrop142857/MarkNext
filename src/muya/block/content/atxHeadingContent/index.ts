@@ -1,5 +1,4 @@
 import type { Muya } from '../../../muya';
-import type { IRenderCursor } from '../../../selection/types';
 import type AtxHeading from '../../commonMark/atxHeading';
 import { isKeyboardEvent } from '../../../utils';
 import Format from '../../base/format';
@@ -24,10 +23,6 @@ class AtxHeadingContent extends Format {
 
     override getAnchor() {
         return this.parent;
-    }
-
-    override update(cursor?: IRenderCursor, highlights = []) {
-        return this.inlineRenderer.patch(this, cursor, highlights);
     }
 
     override enterHandler(event: Event) {

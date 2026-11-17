@@ -121,8 +121,9 @@ function makeClipboard(
 ) {
     const clipboard = new Clipboard({
         trackTask: <T>(task: () => Promise<T>) => task(),
+        flush: vi.fn(),
         options: { bulletListMarker: '-', frontMatter: true, ...options },
-        editor: {},
+        editor: { history: { breakGroup: vi.fn() } },
     } as unknown as Muya);
     Object.defineProperty(clipboard, 'selection', {
         get: () => ({

@@ -369,7 +369,7 @@ export class Editor {
             anchorBlock
             && anchor
             && focus
-            && scrollPage?.queryBlock(anchorPath) === anchorBlock
+            && scrollPage?.queryBlock([...anchorPath]) === anchorBlock
         ) {
             anchorBlock.setCursor(anchor.offset, focus.offset, true);
             return;
@@ -428,8 +428,10 @@ export class Editor {
     }
 
     private _restoreSelection(selection: Nullable<IHistorySelection>, treeRebuilt = false) {
-        if (!selection)
+        if (!selection) {
+            this.focus();
             return;
+        }
 
         const { anchor, focus, isSelectionInSameBlock } = selection;
         // `ScrollPage.queryBlock` consumes the path array in place (`path.shift`),

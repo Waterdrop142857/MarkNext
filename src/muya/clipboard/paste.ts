@@ -7,6 +7,7 @@ import type { Nullable } from '../types';
 import type Clipboard from './index';
 import CodeBlockContent from '../block/content/codeBlockContent';
 import LangInputContent from '../block/content/langInputContent';
+import Format from '../block/base/format';
 import { ScrollPage } from '../block/scrollPage';
 import { URL_REG } from '../config';
 import { tokenizer } from '../inlineRenderer/lexer';
@@ -588,6 +589,22 @@ interface IPasteData {
 async function applyPaste(clipboard: Clipboard, data: IPasteData): Promise<void> {
     const { muya } = clipboard;
     if (muya.destroyed) return;
+    muya.flush();
+    muya.editor.history.breakGroup();
+    try {
+        await applyPasteContents(clipboard, data);
+    }
+    finally {
+        if (!muya.destroyed) {
+            muya.flush();
+            muya.editor.history.breakGroup();
+        }
+    }
+}
+
+async function applyPasteContents(clipboard: Clipboard, data: IPasteData): Promise<void> {
+    const { muya } = clipboard;
+    if (muya.destroyed) return;
     const { bulletListMarker } = muya.options;
 
     // A selected inline image collapses the text selection, so handle the
@@ -618,7 +635,7 @@ async function applyPaste(clipboard: Clipboard, data: IPasteData): Promise<void>
     if (!isSelectionInSameBlock) {
         clipboard.cutHandler();
 
-        return applyPaste(clipboard, data);
+        return applyPasteContents(clipboard, data);
     }
 
     // When the clipboard holds an image — either a file resolved to a path
@@ -695,6 +712,22 @@ async function applyPaste(clipboard: Clipboard, data: IPasteData): Promise<void>
     }
     else {
         applyHtmlBlockPaste(clipboard, ctx, text);
+    }
+
+    // Pasting can replace a block marker. Reuse the typed-input
+    // conversion before the model batch is committed. A multi-block paste may
+    // have placed its final caret below this heading, so preserve that caret.
+    if (
+        anchorBlock instanceof Format
+        && muya.domNode.contains(anchorBlock.domNode ?? null)
+    ) {
+        const caret = clipboard.selection.getSelection();
+        const restoreCaret = caret && caret.anchor.block !== anchorBlock;
+        if (restoreCaret)
+            anchorBlock.setCursor(anchorBlock.text.length, anchorBlock.text.length);
+        anchorBlock.checkInlineUpdate();
+        if (restoreCaret)
+            caret.anchor.block.setCursor(caret.anchor.offset, caret.focus.offset, true);
     }
 }
 

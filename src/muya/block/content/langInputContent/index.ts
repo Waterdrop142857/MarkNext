@@ -1,6 +1,7 @@
 import type { Muya } from '../../../muya';
 import type { IRenderCursor } from '../../../selection/types';
 import type { ICodeBlockState } from '../../../state/types';
+import type { TBlockPath } from '../../types';
 import type CodeBlock from '../../commonMark/codeBlock';
 import { CLASS_NAMES } from '../../../config';
 import Content from '../../base/content';
@@ -28,8 +29,20 @@ class LangInputContent extends Content {
         return this.parent;
     }
 
-    override update(_cursor?: IRenderCursor, highlights = []) {
-        this.domNode!.innerHTML = escapeLangInputInnerHtml(this.text, highlights);
+    override get path(): TBlockPath {
+        return [...this.parent!.path, 'meta', 'lang'];
+    }
+
+    override checkInlineUpdate(): Content {
+        if (this.parent && this.parent.lang !== this.text)
+            this.parent.lang = this.text;
+        return this;
+    }
+
+    override update(cursor?: IRenderCursor, highlights = []) {
+        this.renderWithSelection(cursor, () => {
+            this.domNode!.innerHTML = escapeLangInputInnerHtml(this.text, highlights);
+        });
     }
 
     /**

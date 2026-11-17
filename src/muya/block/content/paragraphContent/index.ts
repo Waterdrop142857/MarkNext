@@ -209,7 +209,7 @@ class ParagraphContent extends Format {
     }
 
     override update(cursor?: IRenderCursor, highlights = []) {
-        this.inlineRenderer.patch(this, cursor, highlights);
+        super.update(cursor, highlights);
         const { label } = this.inlineRenderer.getLabelInfo(this);
 
         if (this.scrollPage && label)

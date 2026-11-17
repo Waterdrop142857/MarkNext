@@ -1,5 +1,4 @@
 import type { Muya } from '../../../muya';
-import type { IRenderCursor } from '../../../selection/types';
 import type Table from '../../gfm/table';
 import type Cell from '../../gfm/table/cell';
 import type Row from '../../gfm/table/row';
@@ -44,10 +43,6 @@ class TableCellContent extends Format {
 
     override getAnchor() {
         return this.table;
-    }
-
-    override update(cursor?: IRenderCursor, highlights = []) {
-        return this.inlineRenderer.patch(this, cursor, highlights);
     }
 
     private _findNextRow() {

@@ -60,3 +60,38 @@ describe('getLegalOffset', () => {
         p.remove();
     });
 });
+
+for (const loaded of [false, true]) {
+    it(`resolves image boundaries to reusable editable text anchors (loaded=${loaded})`, async () => {
+        const { getOffsetOfParagraph, getTextContent } = await import('../dom');
+        const raw = '![sample](image.png)';
+        const paragraph = document.createElement('span');
+        paragraph.contentEditable = 'true';
+        const image = document.createElement('span');
+        image.className = 'mu-inline-image';
+        image.dataset.raw = raw;
+        image.contentEditable = 'false';
+        const container = document.createElement('span');
+        container.className = 'mu-image-container';
+        if (loaded) container.append(document.createElement('img'));
+        image.append(container);
+        paragraph.append(image);
+        document.body.append(paragraph);
+        try {
+            const start = getNodeAndOffset(paragraph, 0);
+            const end = getNodeAndOffset(paragraph, raw.length);
+            expect(start.node.nodeType).toBe(Node.TEXT_NODE);
+            expect(end.node.nodeType).toBe(Node.TEXT_NODE);
+            expect(start.node.parentElement).toBe(paragraph);
+            expect(end.node.parentElement).toBe(paragraph);
+            expect(getOffsetOfParagraph(start.node, paragraph, start.offset)).toBe(0);
+            expect(getOffsetOfParagraph(end.node, paragraph, end.offset)).toBe(raw.length);
+            expect(getNodeAndOffset(paragraph, 0).node).toBe(start.node);
+            expect(getNodeAndOffset(paragraph, raw.length).node).toBe(end.node);
+            expect(paragraph.childNodes).toHaveLength(3);
+            expect(getTextContent(paragraph, ['mu-math-render', 'mu-ruby-render'])).toBe(raw);
+            expect(getOffsetOfParagraph(paragraph, paragraph, 2)).toBe(raw.length);
+        }
+        finally { paragraph.remove(); }
+    });
+}

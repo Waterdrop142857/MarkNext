@@ -164,37 +164,39 @@ class CodeBlockContent extends Content {
             (this.outContainer?.attachments?.head as HTMLPreview).update(text);
     }
 
-    override update(_cursor?: IRenderCursor, highlights = []) {
-        const { _lang: lang, text } = this;
-        // transform alias to original language
-        const fullLengthLang = transformAliasToOrigin([lang])[0];
-        const domNode = this.domNode!;
-        const code = escapeHTML(getHighlightHtml(text, highlights, true, true))
-            .replace(new RegExp(MARKER_HASH['<'], 'g'), '<')
-            .replace(new RegExp(MARKER_HASH['>'], 'g'), '>')
-            .replace(new RegExp(MARKER_HASH['"'], 'g'), '"')
-            .replace(new RegExp(MARKER_HASH['\''], 'g'), '\'');
+    override update(cursor?: IRenderCursor, highlights = []) {
+        this.renderWithSelection(cursor, () => {
+            const { _lang: lang, text } = this;
+            // transform alias to original language
+            const fullLengthLang = transformAliasToOrigin([lang])[0];
+            const domNode = this.domNode!;
+            const code = escapeHTML(getHighlightHtml(text, highlights, true, true))
+                .replace(new RegExp(MARKER_HASH['<'], 'g'), '<')
+                .replace(new RegExp(MARKER_HASH['>'], 'g'), '>')
+                .replace(new RegExp(MARKER_HASH['"'], 'g'), '"')
+                .replace(new RegExp(MARKER_HASH['\''], 'g'), '\'');
 
-        if (
-            fullLengthLang
-            && /\S/.test(code)
-            && loadedLanguages.has(fullLengthLang)
-        ) {
-            const wrapper = document.createElement('div');
-            wrapper.classList.add(`language-${fullLengthLang}`);
-            wrapper.innerHTML = code;
-            prism.highlightElement(wrapper, false, function (this: HTMLElement) {
-                domNode.innerHTML = this.innerHTML;
-            });
-        }
-        else {
-            domNode.innerHTML = code;
-        }
+            if (
+                fullLengthLang
+                && /\S/.test(code)
+                && loadedLanguages.has(fullLengthLang)
+            ) {
+                const wrapper = document.createElement('div');
+                wrapper.classList.add(`language-${fullLengthLang}`);
+                wrapper.innerHTML = code;
+                prism.highlightElement(wrapper, false, function (this: HTMLElement) {
+                    domNode.innerHTML = this.innerHTML;
+                });
+            }
+            else {
+                domNode.innerHTML = code;
+            }
 
-        this._updateLineNumbers(text);
-        // Re-render the math/diagram/html preview too; undo/redo reaches this
-        // block only through update(), not inputHandler (#1632).
-        this._updatePreviewIfHave(text);
+            this._updateLineNumbers(text);
+            // Re-render the math/diagram/html preview too; undo/redo reaches this
+            // block only through update(), not inputHandler (#1632).
+            this._updatePreviewIfHave(text);
+        });
     }
 
     private _lastLineCount = -1;
@@ -287,17 +289,19 @@ class CodeBlockContent extends Content {
         }
 
         const { tabSize } = this.muya.options;
-        const { start } = this.getCursor()!;
+        const { start, end } = this.getCursor()!;
         const { text } = this;
-        const autoIndent = checkAutoIndent(text, start.offset);
-        const indent = getIndentSpace(text, start.offset);
+        const before = text.substring(0, start.offset);
+        const after = text.substring(end.offset);
+        const remaining = before + after;
+        const autoIndent = checkAutoIndent(remaining, start.offset);
+        const indent = getIndentSpace(remaining, start.offset);
 
         this.text
-            = `${text.substring(0, start.offset)
-            }\n${
+            = `${before}\n${
                 autoIndent ? `${indent + ' '.repeat(tabSize)}\n` : ''
             }${indent
-            }${text.substring(start.offset)}`;
+            }${after}`;
 
         let offset = start.offset + 1 + indent.length;
 
@@ -399,6 +403,8 @@ class CodeBlockContent extends Content {
 
             return cursorBlock.setCursor(0, 0, true);
         }
+        if (event.ctrlKey || event.metaKey || event.altKey)
+            return;
         // The following code should fix a certain bug:
         // when there is one newline(\n) character before cursor.
         // pressing the backspace key should work properly.(compatibility with Firefox)

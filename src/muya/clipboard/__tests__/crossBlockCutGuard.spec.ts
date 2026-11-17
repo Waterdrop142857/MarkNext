@@ -20,6 +20,16 @@ vi.mock('../../utils/prism/index', () => ({
 // selected text because only metaKey (macOS Cmd) was excluded.
 
 describe('shouldCrossBlockCut (#3491)', () => {
+    it.each(['Escape', 'Home', 'End', 'PageUp', 'PageDown', 'Tab', 'Insert', 'F1', 'F12', 'Dead', 'Process', 'Unidentified'])(
+        '%s does not remove a cross-block selection', (key) => {
+            expect(shouldCrossBlockCut(key, false, false)).toBe(false);
+        },
+    );
+
+    it('preserves Alt shortcuts while allowing a Unicode character replacement', () => {
+        expect(shouldCrossBlockCut('a', false, false, true)).toBe(false);
+        expect(shouldCrossBlockCut('😀', false, false)).toBe(true);
+    });
     it('does NOT cut on Ctrl+C (Windows/Linux copy)', () => {
         expect(shouldCrossBlockCut('c', false, true)).toBe(false);
     });

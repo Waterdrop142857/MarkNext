@@ -136,6 +136,27 @@ describe('codeBlockContent.backspaceHandler — offset-0 converts to paragraph',
 });
 
 describe('codeBlockContent.enterHandler — plain Enter inserts newline + indent', () => {
+    it.each([
+        { text: 'original', anchor: 0, focus: 8, expected: '\n', offset: 1 },
+        { text: 'abSELECTcd', anchor: 2, focus: 8, expected: 'ab\ncd', offset: 3 },
+        { text: 'abSELECTcd', anchor: 8, focus: 2, expected: 'ab\ncd', offset: 3 },
+        { text: '{SELECT}', anchor: 1, focus: 7, expected: '{\n    \n}', offset: 6 },
+        { text: '{}', anchor: 1, focus: 2, expected: '{\n', offset: 2 },
+        { text: '  SELECT', anchor: 0, focus: 8, expected: '\n', offset: 1 },
+    ])('replaces the selected range $anchor..$focus with a newline', ({ text, anchor, focus, expected, offset }) => {
+        const muya = bootMuya('```text\nsample\n```\n');
+        const content = codeContent(muya);
+        content.text = text;
+        muya.editor.activeContentBlock = content;
+        content.setCursor(anchor, focus, true);
+
+        content.enterHandler(keyEvent());
+
+        expect(content.text).toBe(expected);
+        expect(content.getCursor()!.start.offset).toBe(offset);
+        expect(content.getCursor()!.end.offset).toBe(offset);
+    });
+
     it('keeps the 2-space indent and advances the caret by 1 + indent.length', () => {
         const muya = bootMuya('```js\nfoo\n```\n');
         const content = codeContent(muya);

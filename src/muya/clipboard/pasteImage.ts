@@ -1,4 +1,4 @@
-import type Content from '../block/base/content';
+import Content from '../block/base/content';
 import type Format from '../block/base/format';
 import type { Nullable } from '../types';
 import type Clipboard from './index';
@@ -88,12 +88,16 @@ async function insertImageSrc(
     // placeholder (there is nothing to wait for).
     if (!imageAction) {
         insertImageText(anchorBlock, src);
+        if (anchorBlock instanceof Content)
+            anchorBlock.checkInlineUpdate();
 
         return;
     }
 
     const id = `loading-${getUniqueId()}`;
     const placeholderText = insertImageText(anchorBlock, src, id);
+    if (anchorBlock instanceof Content)
+        anchorBlock = anchorBlock.checkInlineUpdate();
 
     let finalSrc = src;
     const resolved = await imageAction({ src, alt: '', title: '' });

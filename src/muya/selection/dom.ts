@@ -81,8 +81,20 @@ export function getTextContent(node: Node, blackList: string[] = []) {
     return text;
 }
 
-export function getOffsetOfParagraph(node: Node, paragraph: HTMLElement): number {
-    let offset = 0;
+export function getOffsetOfParagraph(node: Node, paragraph: HTMLElement, nodeOffset = 0): number {
+    const localOffset = getLegalOffset(node, nodeOffset);
+    if (
+        isElement(node) && node.classList.contains(CLASS_NAMES.MU_IMAGE_CONTAINER)
+        && localOffset > 0 && node.parentElement?.classList.contains(CLASS_NAMES.MU_INLINE_IMAGE)
+    ) {
+        const image = node.parentElement;
+        return getOffsetOfParagraph(image, paragraph)
+            + getTextContent(image, [CLASS_NAMES.MU_MATH_RENDER, CLASS_NAMES.MU_RUBY_RENDER]).length;
+    }
+    let offset = node.nodeType === Node.TEXT_NODE
+        ? localOffset
+        : Array.from(node.childNodes).slice(0, localOffset).reduce((length, child) =>
+            length + getTextContent(child, [CLASS_NAMES.MU_MATH_RENDER, CLASS_NAMES.MU_RUBY_RENDER]).length, 0);
     let preSibling: Node | null = node;
 
     if (node === paragraph)
@@ -138,44 +150,16 @@ export function getNodeAndOffset(
                 && child.classList
                 && child.classList.contains(`${CLASS_NAMES.MU_INLINE_IMAGE}`)
             ) {
-                const imageContainer = child.querySelector(
-                    `.${CLASS_NAMES.MU_IMAGE_CONTAINER}`,
-                )!;
-                const hasImg = imageContainer.querySelector('img');
-
-                if (!hasImg) {
-                    return {
-                        node: child,
-                        offset: 0,
-                    };
+                const afterImage = count + textLength === offset;
+                let caret = afterImage ? child.nextSibling : child.previousSibling;
+                if (!caret || caret.nodeType !== Node.TEXT_NODE) {
+                    // Empty text anchors carry no Markdown. Keep the caret
+                    // outside the non-editable image, including while loading,
+                    // and reuse the same adjacent anchor on subsequent reads.
+                    caret = child.ownerDocument.createTextNode('');
+                    node.insertBefore(caret, afterImage ? child.nextSibling : child);
                 }
-
-                if (count + textLength === offset) {
-                    if (child.nextElementSibling) {
-                        return {
-                            node: child.nextElementSibling,
-                            offset: 0,
-                        };
-                    }
-                    else {
-                        return {
-                            node: imageContainer,
-                            offset: 1,
-                        };
-                    }
-                }
-                else if (count === offset && count === 0) {
-                    return {
-                        node: imageContainer,
-                        offset: 0,
-                    };
-                }
-                else {
-                    return {
-                        node: child,
-                        offset: 0,
-                    };
-                }
+                return { node: caret, offset: afterImage ? 0 : caret.textContent!.length };
             }
             else {
                 return getNodeAndOffset(child, offset - count);

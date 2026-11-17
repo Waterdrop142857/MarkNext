@@ -64,7 +64,7 @@ function normalizeTextEndpoint(
         : lastTextNode(node);
 
     if (!textNode)
-        return { node, offset: 0 };
+        return { node, offset };
 
     return {
         node: textNode,
@@ -231,8 +231,8 @@ class TextSelection {
         const anchorPath = anchorBlock.path;
         const focusPath = focusBlock.path;
 
-        const aOffset = getOffsetOfParagraph(anchorNode, anchorDomNode) + anchorOffset;
-        const fOffset = getOffsetOfParagraph(focusNode, focusDomNode) + focusOffset;
+        const aOffset = getOffsetOfParagraph(anchorNode, anchorDomNode, anchorOffset);
+        const fOffset = getOffsetOfParagraph(focusNode, focusDomNode, focusOffset);
         const anchor = { offset: aOffset };
         const focus = { offset: fOffset };
 

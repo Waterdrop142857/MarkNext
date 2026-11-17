@@ -88,9 +88,7 @@ export class ScrollPage extends Parent {
 
     private _listenDomEvent() {
         const { eventCenter } = this.muya;
-        const { domNode } = this;
-
-        eventCenter.attachDOMEvent(domNode!, 'click', this._clickHandler.bind(this));
+        eventCenter.attachDOMEvent(this.muya.domNode, 'click', this._clickHandler.bind(this));
     }
 
     updateState(state: TState[]) {
@@ -187,7 +185,13 @@ export class ScrollPage extends Parent {
 
         const target = event.target;
 
-        if (target[BLOCK_DOM_PROPERTY] === this) {
+        if (target[BLOCK_DOM_PROPERTY] === this || target === this.muya.domNode) {
+            const firstContent = this.firstContentInDescendant();
+            if (firstContent?.domNode && event.clientY < firstContent.domNode.getBoundingClientRect().top) {
+                event.preventDefault();
+                firstContent.setCursor(0, 0, true);
+                return;
+            }
             const lastChild = this.lastChild as Parent;
             const lastContentBlock = lastChild.lastContentInDescendant()!;
             const { clientY } = event;

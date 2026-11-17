@@ -1,6 +1,7 @@
 /* eslint-disable no-fallthrough */
 import type {
     CodeEmojiMathToken,
+    IHighlight,
     TextToken,
     Token,
 } from '../../inlineRenderer/types';
@@ -27,7 +28,7 @@ import { generator, tokenizer } from '../../inlineRenderer/lexer';
 import Selection, { getCursorReference } from '../../selection';
 import { getTextContent } from '../../selection/dom';
 import { isListItemState } from '../../state/types';
-import { conflict, isHTMLElement, isMouseEvent } from '../../utils';
+import { conflict, isHTMLElement, isKeyboardEvent, isMouseEvent } from '../../utils';
 import { correctImageSrc, encodeImageSrc, getImageInfo } from '../../utils/image';
 import logger from '../../utils/logger';
 
@@ -214,6 +215,10 @@ function checkTokenIsInlineFormat(token: Token) {
 }
 
 class Format extends Content {
+    override update(cursor?: IRenderCursor, highlights: IHighlight[] = []) {
+        this.renderWithSelection(cursor, renderCursor => this.inlineRenderer.patch(this, renderCursor, highlights));
+    }
+
     static override blockName = 'format';
 
     protected override get autoPairType() {
@@ -687,9 +692,10 @@ class Format extends Content {
 
     // Re-evaluate this block's type from its text (a leading `# `, `- `, `> `…
     // promotes/demotes it). Table cells never reinterpret their text as markdown.
-    checkInlineUpdate(): void {
+    override checkInlineUpdate(): Content {
         if (this.blockName !== 'table.cell.content')
             this._convertIfNeeded();
+        return this.muya.editor.activeContentBlock ?? this;
     }
 
     private _convertIfNeeded() {
@@ -1275,7 +1281,7 @@ class Format extends Content {
     protected convertToParagraph(force = false) {
         if (
             !force
-            && (this.parent!.blockName === 'setext-heading'
+            && ((this.parent!.blockName === 'setext-heading' && this.text.trim().length > 0)
                 || this.parent!.blockName === 'paragraph')
         ) {
             return;
@@ -1306,6 +1312,11 @@ class Format extends Content {
         const { start, end } = this.getCursor() ?? {};
         // Let input handler to handle this case.
         if (!start || !end || start?.offset !== end?.offset)
+            return;
+
+        // Word/line deletion uses the platform's range calculation. The token
+        // compatibility path below removes one character for plain Backspace.
+        if (isKeyboardEvent(event) && (event.ctrlKey || event.metaKey || event.altKey))
             return;
 
         this.muya.editor.history.markInputBoundary('deleteContentBackward', null);

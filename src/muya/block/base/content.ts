@@ -332,6 +332,7 @@ function lineBreakAutoPair(
 class Content extends TreeNode {
     private _text: string;
     protected isComposed: boolean;
+    private _renderPending = false;
 
     static override blockName = 'content';
 
@@ -368,11 +369,6 @@ class Content extends TreeNode {
         const oldText = this._text;
         this._text = text;
         const { path } = this;
-        if (this.blockName === 'language-input') {
-            path.pop();
-            path.push('meta', 'lang');
-        }
-
         // dispatch change to modify json state
         if (oldText !== text) {
             const diffs = diff(oldText, text);
@@ -434,6 +430,12 @@ class Content extends TreeNode {
 
     inputHandler(_event: Event): void {
     // Do nothing.
+    }
+
+    // Literal content keeps its block kind. Formatted content can override
+    // this after a model-owned replacement and return the surviving leaf.
+    checkInlineUpdate(): Content {
+        return this;
     }
 
     backspaceHandler(_event: Event): void {
@@ -594,9 +596,24 @@ class Content extends TreeNode {
         this.selection.setSelection(anchor, focus);
     }
 
-    update(_cursor?: IRenderCursor, _highlights: IHighlight[] = []) {
-        const { text } = this;
-        this.domNode!.innerHTML = `<span class="mu-syntax-text">${text}</span>`;
+    protected renderWithSelection(cursor: IRenderCursor | undefined, render: (cursor?: IRenderCursor) => void): void {
+        if (this.isComposed) {
+            this._renderPending = true;
+            return;
+        }
+        this._renderPending = false;
+        const preserveCaret = !cursor && this.domNode?.isConnected
+            && this.muya.editor.activeContentBlock === this && this.muya.hasFocus();
+        const selection = preserveCaret ? this.getCursor() : null;
+        render(cursor ?? (selection ? { block: this, anchor: selection.anchor, focus: selection.focus } : undefined));
+        if (selection)
+            this.setCursor(Math.min(selection.anchor.offset, this.text.length), Math.min(selection.focus.offset, this.text.length));
+    }
+
+    update(cursor?: IRenderCursor, _highlights: IHighlight[] = []) {
+        this.renderWithSelection(cursor, () => {
+            this.domNode!.innerHTML = `<span class="mu-syntax-text">${this.text}</span>`;
+        });
     }
 
     composeHandler(event: Event) {
@@ -607,6 +624,8 @@ class Content extends TreeNode {
             this.isComposed = false;
             // Because the compose event will not cause `input` event, So need call `inputHandler` by ourself
             this.inputHandler(event);
+            if (this._renderPending && this.domNode?.isConnected)
+                this.update();
         }
     }
 
@@ -728,11 +747,34 @@ class Content extends TreeNode {
                 this.deleteHandler(event);
                 break;
 
-            case EVENT_KEYS.Enter:
-                if (!this.isComposed)
-                    this.enterHandler(event);
+            case EVENT_KEYS.Enter: {
+                if (this.isComposed || event.isComposing)
+                    break;
 
+                const cursor = this.getCursor();
+                const replacesSelection = cursor && !cursor.isCollapsed
+                    && !event.ctrlKey && !event.metaKey && !event.altKey;
+                if (replacesSelection) {
+                    this.muya.flush();
+                    this.muya.editor.history.breakGroup();
+                }
+                if (replacesSelection && (this.blockName === 'atxheading.content' || this.blockName === 'setextheading.content')) {
+                    // Removing a heading's marker must convert its block before
+                    // Enter splits it. Otherwise an empty heading survives in
+                    // the model and serializes with an invalid marker.
+                    event.preventDefault();
+                    this.muya.editor.clipboard.cutHandler();
+                    this.muya.editor.activeContentBlock?.enterHandler(event);
+                }
+                else {
+                    this.enterHandler(event);
+                }
+                if (replacesSelection) {
+                    this.muya.flush();
+                    this.muya.editor.history.breakGroup();
+                }
                 break;
+            }
 
             case EVENT_KEYS.ArrowUp: // fallthrough
 
@@ -790,6 +832,7 @@ class Content extends TreeNode {
         const selectionStart = start.offset + pair.open.length;
         const selectionEnd = selectionStart + selectedText.length;
         this.setCursor(selectionStart, selectionEnd, true);
+        this.checkInlineUpdate();
 
         return true;
     }

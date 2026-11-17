@@ -1,7 +1,8 @@
 import type { Muya } from '../muya';
+import type { ISelection } from '../selection/types';
 import type { IClipboardPayload } from './copyData';
 import Format from '../block/base/format';
-import { isClipboardEvent, isKeyboardEvent } from '../utils';
+import { isClipboardEvent, isInputEvent, isKeyboardEvent } from '../utils';
 import { getClipboardData, writeClipboardData } from './copyData';
 import { cutSelection, deleteTableSelection } from './cut';
 import { pastePlainText, pasteSelection } from './paste';
@@ -13,14 +14,11 @@ import { CopyType, PasteType } from './types';
 // keys and any modifier combo must NOT cut — in particular Ctrl+<key> (e.g.
 // Ctrl+C copy on Windows/Linux), which was previously not excluded and
 // silently deleted the selection (#3491). Mirrors the macOS metaKey guard.
-export function shouldCrossBlockCut(key: string, metaKey: boolean, ctrlKey: boolean): boolean {
-    if (/Alt|Option|Meta|Shift|CapsLock|ArrowUp|ArrowDown|ArrowLeft|ArrowRight/.test(key))
+export function shouldCrossBlockCut(key: string, metaKey: boolean, ctrlKey: boolean, altKey = false): boolean {
+    if (metaKey || ctrlKey || altKey)
         return false;
 
-    if (metaKey || ctrlKey)
-        return false;
-
-    return true;
+    return key === 'Backspace' || key === 'Delete' || key === 'Enter' || Array.from(key).length === 1;
 }
 
 class Clipboard {
@@ -48,6 +46,55 @@ class Clipboard {
     private _listen() {
         const ownsEvent = () => this.muya.hasFocus();
 
+        const replaceSelection = (event: Event, selection: ISelection, text?: string) => {
+            event.preventDefault();
+            this.muya.flush();
+            this.muya.editor.history.breakGroup();
+            if (text === undefined) {
+                this.cutHandler();
+            }
+            else {
+                this.muya.editor.history.markInputBoundary('insertText', text);
+                let block = selection.anchor.block;
+                let start = Math.min(selection.anchor.offset, selection.focus.offset);
+                let end = Math.max(selection.anchor.offset, selection.focus.offset);
+                if (!selection.isSelectionInSameBlock) {
+                    this.cutHandler();
+                    // A cross-block cut seats a caret in its surviving leaf.
+                    block = this.muya.editor.activeContentBlock!;
+                    start = end = block.getCursor()!.start.offset;
+                }
+                // Replace in one mutation so a non-empty Setext title keeps its
+                // heading metadata while an ATX marker can convert normally.
+                block.text = block.text.slice(0, start) + text + block.text.slice(end);
+                const offset = start + text.length;
+                block.setCursor(offset, offset, true);
+                // Reuse each content type's input rules, including pairing,
+                // language metadata and preview updates.
+                block.inputHandler(event);
+            }
+            this.muya.flush();
+            if (text === undefined)
+                this.muya.editor.history.breakGroup();
+        };
+
+        const beforeInputHandler = (event: Event) => {
+            if (
+                !ownsEvent() || !isInputEvent(event)
+                || event.defaultPrevented || !event.cancelable || event.isComposing
+                || this.selection.table.hasSelection
+            ) return;
+
+            const deletesText = event.inputType.startsWith('delete')
+                && !['deleteByCut', 'deleteByDrag', 'deleteCompositionText'].includes(event.inputType);
+            const insertsText = event.inputType === 'insertText' && event.data !== null && event.data.length > 0;
+            if (!deletesText && !insertsText)
+                return;
+            const selection = this.selection.getSelection();
+            if (selection && !selection.isCollapsed)
+                replaceSelection(event, selection, insertsText ? event.data! : undefined);
+        };
+
         const copyCutHandler = (event: Event) => {
             if (!ownsEvent() || !isClipboardEvent(event))
                 return;
@@ -58,14 +105,24 @@ class Clipboard {
 
             this.copyHandler(event);
 
-            if (isCut)
+            if (isCut) {
+                this.muya.flush();
+                this.muya.editor.history.breakGroup();
                 this.cutHandler();
+                this.muya.flush();
+                this.muya.editor.history.breakGroup();
+            }
         };
 
         const keydownHandler = (event: Event) => {
             if (!ownsEvent() || !isKeyboardEvent(event))
                 return;
             const { key, metaKey } = event;
+
+            // Let the platform dispatch the cut event so Shift+Delete writes
+            // the same clipboard payload as Ctrl/Cmd+X.
+            if (key === 'Delete' && event.shiftKey)
+                return;
 
             if (this.selection.table.hasSelection) {
                 if (!metaKey && (key === 'Backspace' || key === 'Delete')) {
@@ -75,13 +132,39 @@ class Clipboard {
                 return;
             }
 
-            const { isSelectionInSameBlock } = this.selection.getSelection() ?? {};
-            if (isSelectionInSameBlock)
+            const selection = this.selection.getSelection();
+            if (!selection)
+                return;
+            if (selection.isSelectionInSameBlock) {
+                if (
+                    !selection.isCollapsed
+                    && !event.defaultPrevented
+                    && !event.isComposing && event.keyCode !== 229
+                    && !event.metaKey && !event.ctrlKey && !event.altKey
+                    && (!event.shiftKey || key === 'Backspace')
+                    && (key === 'Backspace' || key === 'Delete')
+                ) {
+                    // WebKit can remove the content span when deleting a whole
+                    // heading. Its subsequent input event has no model endpoint.
+                    replaceSelection(event, selection);
+                }
+                return;
+            }
+
+            // WebKit reports the IME's initial replacement key as code 229
+            // with a non-printable key name. Prepare its cross-block range
+            // through the model before the native preedit starts.
+            const startsComposition = event.keyCode === 229;
+            if (event.defaultPrevented || (!startsComposition && !shouldCrossBlockCut(key, metaKey, event.ctrlKey, event.altKey)))
                 return;
 
-            if (!shouldCrossBlockCut(key, metaKey, event.ctrlKey))
+            if (key === 'Backspace' || key === 'Delete') {
+                replaceSelection(event, selection);
                 return;
+            }
 
+            this.muya.flush();
+            this.muya.editor.history.breakGroup();
             // Enter over a cross-block selection: suppress the corrupting native
             // Enter and mirror the same-block path — delete then split (#2443).
             if (key === 'Enter') {
@@ -90,11 +173,10 @@ class Clipboard {
                 const block = this.muya.editor.activeContentBlock;
                 if (!event.shiftKey && block instanceof Format)
                     block.enterHandler(event);
+                this.muya.flush();
+                this.muya.editor.history.breakGroup();
                 return;
             }
-
-            if (key === 'Backspace' || key === 'Delete')
-                event.preventDefault();
 
             this.cutHandler();
         };
@@ -110,6 +192,9 @@ class Clipboard {
         eventCenter.attachDOMEvent(document, 'cut', copyCutHandler);
         eventCenter.attachDOMEvent(document, 'paste', pasteHandler);
         eventCenter.attachDOMEvent(document, 'keydown', keydownHandler);
+        // Covers modifier-assisted and native-menu deletion before WebKit can
+        // remove the content span that connects the DOM selection to the model.
+        eventCenter.attachDOMEvent(this.muya.domNode, 'beforeinput', beforeInputHandler);
     }
 
     getClipboardData(): IClipboardPayload {
