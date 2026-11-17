@@ -200,7 +200,7 @@ PDF 功能的独立原生测试见文末“原生 PDF 导出回归”。
 
 ```bash
 cargo build --locked --manifest-path src-tauri/Cargo.toml
-Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -ac
+Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -noreset -ac
 ```
 
 保持 Xvfb 运行，在另一个终端执行：
@@ -214,6 +214,52 @@ dbus-run-session -- python3 tests/native/file_drop.py --display :96
 本次复现使用系统 WebKitGTK 2.54.2、GTK 3 和独立 Xvfb。旧实现能收到 URI，但因读取被 Tauri 移除的运行时文件关联列表而过滤掉所有文档；真实 `generate_context!()` 的 Rust 回归在旧实现失败、修复后通过。另以兼容 ICU 环境执行 `nativeFiles.spec.ts` 的 5 项 WebKit 浏览器回归，通过后再执行原生测试。X11 原生回归不代替实际 niri/Wayland 文件管理器和 Windows/macOS 的验收。
 
 补充原生 Wayland 验证：在 Xvfb 内运行 Weston 的嵌套 Wayland 会话，使 Tauri 使用 `GdkWaylandDisplay`、Dolphin 使用 Qt Wayland 平台。外部 GTK 源及实际 Dolphin 文件管理器均成功拖入含中文/空格/`#`/`%` 的 Markdown 文件；GTK 源收到 COPY 确认，编辑器内容通过真实 Wayland 剪贴板读回并与文件比较，源文件保留且内容不变。此轮为独立原生集成验证，记录位于 `test-results/native-wayland/`；上面的自动脚本仍只声明 X11 支持。Weston 验证不等同于用户的 niri 会话验收。
+
+## 内容编辑、选区与输入焦点回归
+
+浏览器回归覆盖标题、段落、引用、列表、任务列表、嵌套列表、代码、表格、公式、HTML、
+frontmatter、分隔线，以及行内格式、链接和图片。块内选区和整篇全选分别检查删除、换行、
+直接替换、真实剪贴板粘贴、自动配对、剪切及图片粘贴，比较 DOM、活动模型、JSON 状态、
+保存内容、撤销重做和继续输入。另检查图表源码恢复、矩形表格选区、顶部/底部空白点击、
+按词删除、后台重绘与输入法预编辑期间的重绘。代码类内容还明确检查 Enter 替换选区后的正文，
+局部选区的自动缩进按删除后的文本计算。
+
+```bash
+pnpm typecheck
+pnpm exec vitest run src/muya src/editor/__tests__
+pnpm build
+pnpm exec playwright test --project=chromium tests/e2e/contentEditing.spec.ts tests/e2e/selectionEdges.spec.ts tests/e2e/diagramEditing.spec.ts tests/e2e/headingDeletion.spec.ts tests/e2e/textDrag.spec.ts
+```
+
+共享断言位于 `tests/e2e/editorAssertions.ts`。选区编辑与路径/历史的单元回归分别位于
+`src/muya/clipboard/__tests__/selectedDeletion.spec.ts`、`src/muya/__tests__/contentEditing.spec.ts`
+及 `src/muya/selection/__tests__/offsetClamp.spec.ts`。
+准备专用 Xvfb 和私有 D-Bus 会话后，可运行完整程序回归。
+
+```bash
+pnpm build
+cargo build --locked --features tauri/custom-protocol --manifest-path src-tauri/Cargo.toml
+dbus-run-session -- python3 tests/native/heading_deletion.py --display :96
+dbus-run-session -- python3 tests/native/content_editing.py --display :96
+dbus-run-session -- python3 tests/native/editor_ime.py --display :96
+```
+
+脚本使用真实键盘、鼠标、系统剪贴板和文件保存，覆盖输入二级标题后全选并按 Delete、Backspace、
+Shift+Backspace、Ctrl+Backspace、Ctrl+Delete、Enter、Shift+Enter，以及剪切、直接替换和粘贴。
+另检查 Setext 标题清空、每次操作的撤销重做、顶部点击、继续输入及 Ctrl+A/Ctrl+C。
+Delete/Backspace 分别检查空文档和重新输入两个段落的情况。原生粘贴使用独立 GTK 剪贴板所有者。
+粘贴的剪贴板内容在输入标题前准备，检查紧接输入的剪切、粘贴是否有独立撤销边界。
+脚本可用 `--case atx-paste-empty` 单独重放粘贴场景。
+
+单元回归还覆盖无 keydown 的 `beforeinput` 选区删除、跨块删除、局部标题标记替换、多段粘贴后的光标，
+以及输入法、拖放和剪切事件的处理边界。浏览器回归验证真实选区、粘贴、保存及历史一致性。
+
+`content_editing.py` 在不同块及代码语言字段中实际编辑、保存、撤销重做，再输入独立标记，
+检查图片后的光标、顶部表格空白、跨块导航键和代码选区换行。`editor_ime.py` 需要系统已安装 Fcitx 5 及拼音
+输入模块，通过私有配置启动独立输入法进程，验证标题、跨段落、引用、图片、代码和表格中的
+中文替换与继续输入。两个脚本均可用 `--case` 选择用例。原生测试应顺序运行，避免共用显示屏
+的输入互相干扰；专用 Xvfb 使用 `-noreset`，保证连续启动应用时显示服务保持稳定。
+这些脚本验证 Linux X11 下的真实 Tauri/WebKitGTK，其他平台及 Wayland 需要对应环境验收。
 
 ## HTML 导出回归
 
@@ -253,7 +299,7 @@ Linux 需要 GTK 3 的 Python GI 绑定、`xdotool`、Xvfb、`dbus-run-session` 
 ```bash
 pnpm dev
 cargo build --locked --manifest-path src-tauri/Cargo.toml
-Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -ac
+Xvfb :96 -screen 0 1600x1000x24 -nolisten tcp -noreset -ac
 ```
 
 再从项目根目录、调用者的原显示屏环境执行：
