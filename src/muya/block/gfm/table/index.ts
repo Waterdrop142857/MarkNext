@@ -9,7 +9,7 @@ import type TableRow from './row';
 import type TableInner from './table';
 import diff from 'fast-diff';
 import { fromEvent } from 'rxjs';
-import { diffToTextOp } from '../../../utils';
+import { diffToTextOp, isMouseEvent } from '../../../utils';
 import logger from '../../../utils/logger';
 import { LinkedList } from '../../base/linkedList/linkedList';
 import Parent from '../../base/parent';
@@ -98,6 +98,14 @@ class Table extends Parent {
         // Fix: prevent cursor present at the end of table.
         const mousedownHandler = (event: Event) => {
             if (event.target === domNode) {
+                // A horizontal scrollbar belongs to this figure too. Let the
+                // native track/thumb handle presses below its client area.
+                if (isMouseEvent(event) && domNode!.offsetHeight > domNode!.clientHeight) {
+                    const rect = domNode!.getBoundingClientRect();
+                    const scale = rect.height / domNode!.offsetHeight;
+                    if (event.clientY >= rect.top + (domNode!.clientTop + domNode!.clientHeight) * scale)
+                        return;
+                }
                 event.preventDefault();
                 const cursorBlock = this.lastContentInDescendant()!;
                 const offset = cursorBlock.text.length;

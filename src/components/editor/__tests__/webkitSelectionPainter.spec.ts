@@ -43,6 +43,32 @@ function mockTextRects() {
 }
 
 describe("WebKit selection geometry", () => {
+  it('clips text and padding to nested scroll viewports, including scaled borders and gutters', () => {
+    const root = editor('<section style="overflow-x:hidden"><div style="overflow:auto"><p>selected</p></div></section>');
+    const outer = root.querySelector<HTMLElement>('section')!;
+    const inner = root.querySelector<HTMLElement>('section > div')!;
+    vi.spyOn(outer, 'getBoundingClientRect').mockReturnValue(new DOMRect(80, 0, 100, 200));
+    vi.spyOn(outer, 'clientWidth', 'get').mockReturnValue(100);
+    vi.spyOn(inner, 'getBoundingClientRect').mockReturnValue(new DOMRect(50, 10, 200, 80));
+    vi.spyOn(inner, 'offsetWidth', 'get').mockReturnValue(100);
+    vi.spyOn(inner, 'offsetHeight', 'get').mockReturnValue(40);
+    vi.spyOn(inner, 'clientWidth', 'get').mockReturnValue(90);
+    vi.spyOn(inner, 'clientHeight', 'get').mockReturnValue(40);
+    let rect = new DOMRect(20, 20, 300, 18);
+    vi.spyOn(Range.prototype, 'getClientRects').mockImplementation(() => ({
+      0: rect, length: 1, item: index => index === 0 ? rect : null,
+      [Symbol.iterator]: () => [rect][Symbol.iterator](),
+    }));
+    const range = selectContents(root);
+    expect(collectVisibleSelectionRects(root, range, undefined, 2)).toEqual([new DOMRect(80, 20, 100, 18)]);
+    vi.spyOn(outer, 'clientWidth', 'get').mockReturnValue(200);
+    expect(collectVisibleSelectionRects(root, range, undefined, 2)).toEqual([new DOMRect(80, 20, 150, 18)]);
+    rect = new DOMRect(100, 200, 20, 18);
+    expect(collectVisibleSelectionRects(root, range, undefined, 2)).toEqual([]);
+    rect = new DOMRect(100, 20, 0, 18);
+    expect(collectVisibleSelectionRects(root, range, undefined, 2)).toEqual([]);
+  });
+
   it("excludes KaTeX's hidden MathML but selects its visible aria-hidden HTML once", () => {
     const root = editor(`<p>Hello Muya</p><div>${renderToString("C^{C^C} C_s S")}</div><p>\u200B</p>`);
     const html = root.querySelector<HTMLElement>(".katex-html")!;
@@ -190,6 +216,13 @@ describe("WebKit painter lifecycle", () => {
       + `<pre class="mu-${kind}-container">source</pre></figure>`;
     root.innerHTML = `<p>outside preview</p>${figure}${figure}`;
     wrapper.appendChild(root);
+    // HTML previews have their own scroll viewport. Supply its layout geometry
+    // because DOM emulation reports zero client dimensions for every element.
+    root.querySelectorAll<HTMLElement>('.mu-html-preview').forEach(element => {
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 500, 200));
+      vi.spyOn(element, 'clientWidth', 'get').mockReturnValue(500);
+      vi.spyOn(element, 'clientHeight', 'get').mockReturnValue(200);
+    });
     root.querySelectorAll(".katex-html").forEach(element => {
       vi.spyOn(element, "getBoundingClientRect").mockReturnValue(new DOMRect(10, 60, 80, 18));
     });

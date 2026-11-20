@@ -261,6 +261,18 @@ Delete/Backspace 分别检查空文档和重新输入两个段落的情况。原
 的输入互相干扰；专用 Xvfb 使用 `-noreset`，保证连续启动应用时显示服务保持稳定。
 这些脚本验证 Linux X11 下的真实 Tauri/WebKitGTK，其他平台及 Wayland 需要对应环境验收。
 
+宽内容及全窗口编辑区的专项回归使用 `tests/e2e/wideContent.spec.ts`，覆盖表格的局部横向滚动、
+代码选区在缩放和滚动后的裁剪、清空长文档后的滚动范围，以及正文区四周空白的输入和保存。
+浏览器测试在 Chromium 中启用同一选区绘制器以检查几何，原生 WebKitGTK 行为由下面的完整程序测试验证。
+
+```bash
+pnpm exec playwright test --project=chromium tests/e2e/wideContent.spec.ts
+dbus-run-session -- python3 tests/native/wide_content.py --display :96
+```
+
+原生脚本使用独立配置及文档、1024×720 默认窗口和至少 1280×900 的专用显示屏，检查真实选区截图、
+横向滚动后最右列的编辑及撤销重做、清空后的继续输入，以及全宽正文区域边缘的输入和落盘内容。
+
 ## HTML 导出回归
 
 前端验证：`pnpm typecheck`，以及

@@ -60,10 +60,49 @@ export function collectVisibleSelectionRects(
   domNode: HTMLElement,
   range: Range,
   selectedPreviewBlocks?: Set<Element>,
+  padX = 0,
 ): DOMRect[] {
   const doc = domNode.ownerDocument;
   const view = doc.defaultView;
   if (!view) return [];
+  type Bounds = { left: number; right: number; top: number; bottom: number };
+  const styles = new WeakMap<Element, CSSStyleDeclaration>();
+  const clips = new WeakMap<Element, Bounds>();
+  function styleOf(element: Element): CSSStyleDeclaration {
+    let style = styles.get(element);
+    if (!style) {
+      style = view!.getComputedStyle(element);
+      styles.set(element, style);
+    }
+    return style;
+  }
+  function clipOf(element: Element): Bounds {
+    const cached = clips.get(element);
+    if (cached) return cached;
+    const bounds = element.parentElement ? { ...clipOf(element.parentElement) }
+      : { left: -Infinity, right: Infinity, top: -Infinity, bottom: Infinity };
+    const style = styleOf(element);
+    const clipsX = /^(auto|scroll|hidden|clip|overlay)$/.test(style.overflowX || style.overflow);
+    const clipsY = /^(auto|scroll|hidden|clip|overlay)$/.test(style.overflowY || style.overflow);
+    if (clipsX || clipsY) {
+      const box = element.getBoundingClientRect();
+      const html = element instanceof view!.HTMLElement ? element : null;
+      const scaleX = html?.offsetWidth ? box.width / html.offsetWidth : 1;
+      const scaleY = html?.offsetHeight ? box.height / html.offsetHeight : 1;
+      if (clipsX) {
+        const left = box.left + element.clientLeft * scaleX;
+        bounds.left = Math.max(bounds.left, left);
+        bounds.right = Math.min(bounds.right, left + element.clientWidth * scaleX);
+      }
+      if (clipsY) {
+        const top = box.top + element.clientTop * scaleY;
+        bounds.top = Math.max(bounds.top, top);
+        bounds.bottom = Math.min(bounds.bottom, top + element.clientHeight * scaleY);
+      }
+    }
+    clips.set(element, bounds);
+    return bounds;
+  }
   const atomicSelector = "img, svg, canvas, video, .katex-html";
   const walker = doc.createTreeWalker(domNode, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -74,7 +113,7 @@ export function collectVisibleSelectionRects(
       if (node.nodeType === Node.ELEMENT_NODE) {
         const element = node as Element;
         if (element.matches(".katex-mathml, .mu-webkit-selection-overlay, [hidden], script, style")) return NodeFilter.FILTER_REJECT;
-        const style = view.getComputedStyle(element);
+        const style = styleOf(element);
         if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse"
           || style.opacity === "0") return NodeFilter.FILTER_REJECT;
         // Muya keeps inactive formula/HTML/diagram source in a transparent,
@@ -88,7 +127,7 @@ export function collectVisibleSelectionRects(
       }
       // Hidden Markdown delimiters can have normal line height and zero font
       // size. Their geometry must not acquire a visible horizontal padding.
-      if (node.parentElement && Number.parseFloat(view.getComputedStyle(node.parentElement).fontSize) === 0) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement && Number.parseFloat(styleOf(node.parentElement).fontSize) === 0) return NodeFilter.FILTER_REJECT;
       return node.textContent?.replace(/[\u200B-\u200D\u2060\uFEFF]/g, "").length
         ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
     },
@@ -106,9 +145,21 @@ export function collectVisibleSelectionRects(
       textRange.setEnd(node, node === range.endContainer ? range.endOffset : node.textContent!.length);
       nodeRects = Array.from(textRange.getClientRects());
     }
-    rects.push(...nodeRects);
-    if (selectedPreviewBlocks && nodeRects.some(rect => rect.width > 0 && rect.height > 0)) {
-      const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement;
+    const element = node.nodeType === Node.ELEMENT_NODE ? node as Element : node.parentElement!;
+    const clip = clipOf(element);
+    const visible: DOMRect[] = [];
+    for (const rect of nodeRects) {
+      if (rect.width <= 0 || rect.height <= 0
+        || ![rect.left, rect.right, rect.top, rect.bottom].every(Number.isFinite)) continue;
+      // Pad before clipping so highlights stay out of scroll gutters and margins.
+      const left = Math.max(rect.left - padX, clip.left);
+      const right = Math.min(rect.right + padX, clip.right);
+      const top = Math.max(rect.top, clip.top);
+      const bottom = Math.min(rect.bottom, clip.bottom);
+      if (right > left && bottom > top) visible.push(new view.DOMRect(left, top, right - left, bottom - top));
+    }
+    rects.push(...visible);
+    if (selectedPreviewBlocks && visible.length > 0) {
       const preview = element?.closest(".mu-math-preview, .mu-html-preview");
       const block = preview?.closest("figure.mu-math-block, figure.mu-html-block");
       if (block) selectedPreviewBlocks.add(block);
@@ -153,7 +204,6 @@ export function createWebKitSelectionPainter(
     // is a positioned layer behind the text so it never affects layout or input.
     domNode.style.position = "relative";
     domNode.style.zIndex = "0";
-    selectionOverlay.style.height = `${domNode.scrollHeight || domNode.clientHeight}px`;
   }
 
   function schedulePaint() {
@@ -185,7 +235,7 @@ export function createWebKitSelectionPainter(
     const scaleY = domNode.offsetHeight ? editorRect.height / domNode.offsetHeight : 1;
     const padX = 2; // small horizontal breathing room, matches the old CSS padding
     const nextSelectedPreviewBlocks = new Set<Element>();
-    const rects = mergeSelectionRects(collectVisibleSelectionRects(domNode, range, nextSelectedPreviewBlocks), padX);
+    const rects = mergeSelectionRects(collectVisibleSelectionRects(domNode, range, nextSelectedPreviewBlocks, padX), 0);
     syncSelectedPreviewBlocks(nextSelectedPreviewBlocks);
     for (let i = 0; i < rects.length; i++) {
       const r = rects[i];
